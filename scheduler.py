@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-定时任务模块 - 修复配置访问
+定时任务模块 - 使用 self.plugin.config 访问配置
 """
 
 import asyncio
@@ -36,8 +36,8 @@ class VoiceScheduler:
     async def _loop(self) -> None:
         while self.running:
             try:
-                enabled = await self.plugin.context.plugin_config.get("enabled", True)
-                sched_enabled = await self.plugin.context.plugin_config.get("schedule.enabled", False)
+                enabled = self.plugin.config.get("enabled", True)
+                sched_enabled = self.plugin.config.get("schedule.enabled", False)
                 if not (enabled and sched_enabled):
                     await asyncio.sleep(60)
                     continue
@@ -55,11 +55,11 @@ class VoiceScheduler:
     async def _should_send(self) -> bool:
         now = time.localtime()
         current_time = time.strftime("%H:%M", now)
-        target_time = await self.plugin.context.plugin_config.get("schedule.time", "08:00")
+        target_time = self.plugin.config.get("schedule.time", "08:00")
         if current_time != target_time:
             return False
 
-        freq = await self.plugin.context.plugin_config.get("schedule.frequency", "daily")
+        freq = self.plugin.config.get("schedule.frequency", "daily")
         if freq == "daily":
             key = time.strftime("%Y-%m-%d", now)
         elif freq == "weekly":
@@ -75,12 +75,12 @@ class VoiceScheduler:
         return True
 
     async def _send_voice(self) -> None:
-        targets: List[str] = await self.plugin.context.plugin_config.get("schedule.target_sessions", [])
+        targets: List[str] = self.plugin.config.get("schedule.target_sessions", [])
         if not targets:
             logger.info("[定时发送] 无目标会话，跳过")
             return
 
-        tags: List[str] = await self.plugin.context.plugin_config.get("schedule.voice_tags", [])
+        tags: List[str] = self.plugin.config.get("schedule.voice_tags", [])
         tag = random.choice(tags) if tags else None
 
         path = self.voice_manager.get_voice(tag)
@@ -99,13 +99,15 @@ class VoiceScheduler:
                 logger.error(f"[定时发送] 失败 {session_id}: {e}")
 
     async def add_target(self, session_id: str):
-        current: List[str] = await self.plugin.context.plugin_config.get("schedule.target_sessions", [])
+        current: List[str] = self.plugin.config.get("schedule.target_sessions", [])
         if session_id not in current:
             current.append(session_id)
-            await self.plugin.context.plugin_config.set("schedule.target_sessions", current)
+            self.plugin.config["schedule.target_sessions"] = current
+            self.plugin.config.save_config()
 
     async def remove_target(self, session_id: str):
-        current: List[str] = await self.plugin.context.plugin_config.get("schedule.target_sessions", [])
+        current: List[str] = self.plugin.config.get("schedule.target_sessions", [])
         if session_id in current:
             current.remove(session_id)
-            await self.plugin.context.plugin_config.set("schedule.target_sessions", current)
+            self.plugin.config["schedule.target_sessions"] = current
+            self.plugin.config.save_config()

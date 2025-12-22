@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Echo of Theresia - 完全修复最终版（兼容你的 AstrBot 版本）
+Echo of Theresia - 官方配置注入最终版（已解决所有报错）
 """
 
 from astrbot.api.star import Context, Star, register
@@ -19,8 +19,9 @@ from .scheduler import VoiceScheduler
     "1.0.0"
 )
 class TheresiaVoicePlugin(Star):
-    def __init__(self, context: Context):
+    def __init__(self, context: Context, config=None):
         super().__init__(context)
+        self.config = config or {}  # 官方注入的配置对象（支持 _conf_schema.json）
         self.voice_manager = VoiceManager(self)
         self.scheduler = VoiceScheduler(self, self.voice_manager)
 
@@ -37,19 +38,19 @@ class TheresiaVoicePlugin(Star):
     # 关键词触发
     @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
-        enabled = await self.context.plugin_config.get("enabled", True)
+        enabled = self.config.get("enabled", True)
         if not enabled:
             return
 
-        keywords = await self.context.plugin_config.get("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
+        keywords = self.config.get("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
         text = event.get_plain_text() or ""
-        prefix = await self.context.plugin_config.get("command.prefix", "/theresia")
+        prefix = self.config.get("command.prefix", "/theresia")
 
         if text.startswith(prefix):
             return
 
         if any(kw in text for kw in keywords):
-            tag = await self.context.plugin_config.get("voice.default_tag", "")
+            tag = self.config.get("voice.default_tag", "")
             path = self.voice_manager.get_voice(tag or None)
             if path:
                 yield event.chain([Record(file=path)])
@@ -73,13 +74,15 @@ class TheresiaVoicePlugin(Star):
 
     @filter.command("theresia enable")
     async def enable(self, event: AstrMessageEvent):
-        await self.context.plugin_config.set("enabled", True)
+        self.config["enabled"] = True
+        self.config.save_config()
         await self.scheduler.start()
         yield event.plain_result("特雷西娅语音插件已启用♪")
 
     @filter.command("theresia disable")
     async def disable(self, event: AstrMessageEvent):
-        await self.context.plugin_config.set("enabled", False)
+        self.config["enabled"] = False
+        self.config.save_config()
         await self.scheduler.stop()
         yield event.plain_result("特雷西娅语音插件已禁用")
 
