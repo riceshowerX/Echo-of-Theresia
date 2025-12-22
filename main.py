@@ -25,9 +25,7 @@ from .scheduler import VoiceScheduler
 @register(
     name="echo_of_theresia",
     author="AstrBot Dev",
-    description="明日方舟特雷西娅角色语音插件，支持定时发送和对话触发功能",
-    version="1.0.0",
-    repo=""
+    version="1.0.0"
 )
 class TheresiaVoicePlugin(Star):
     """特雷西娅语音插件"""
