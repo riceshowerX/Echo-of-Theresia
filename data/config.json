@@ -1,0 +1,24 @@
+{
+    "enabled": true,
+    "schedule": {
+        "enabled": false,
+        "time": "12:00",
+        "frequency": "daily",
+        "voice_tags": [
+            "greeting",
+            "story"
+        ]
+    },
+    "command": {
+        "prefix": "/theresia",
+        "keywords": [
+            "特雷西娅",
+            "特蕾西娅",
+            "Theresia"
+        ]
+    },
+    "voice": {
+        "quality": "high",
+        "default_tag": ""
+    }
+}
