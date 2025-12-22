@@ -1,79 +1,57 @@
 {
   "enabled": {
-    "description": "插件启用状态",
-    "type": "bool",
+    "type": "boolean",
     "default": true,
-    "hint": "控制插件是否启用"
+    "label": "插件总开关",
+    "description": "是否启用整个特雷西娅语音插件"
   },
-  "schedule": {
-    "description": "定时发送配置",
-    "type": "object",
-    "hint": "设置定时发送相关参数",
-    "items": {
-      "enabled": {
-        "description": "定时发送开关",
-        "type": "bool",
-        "default": false,
-        "hint": "是否启用定时发送功能"
-      },
-      "time": {
-        "description": "发送时间",
-        "type": "string",
-        "default": "08:00",
-        "hint": "定时发送的时间，格式为HH:MM"
-      },
-      "frequency": {
-        "description": "发送频率",
-        "type": "string",
-        "default": "daily",
-        "options": ["daily", "weekly", "hourly"],
-        "hint": "定时发送的频率，可选值：daily（每日）、weekly（每周）、hourly（每小时）"
-      },
-      "voice_tags": {
-        "description": "语音标签",
-        "type": "list",
-        "default": [],
-        "hint": "定时发送的语音标签，空列表表示所有语音"
-      }
-    }
+  "command.prefix": {
+    "type": "string",
+    "default": "/theresia",
+    "label": "指令前缀",
+    "description": "所有插件指令的前缀"
   },
-  "command": {
-    "description": "命令配置",
-    "type": "object",
-    "hint": "设置命令相关参数",
-    "items": {
-      "prefix": {
-        "description": "命令前缀",
-        "type": "string",
-        "default": "/theresia",
-        "hint": "插件命令的前缀"
-      },
-      "keywords": {
-        "description": "触发关键词",
-        "type": "list",
-        "default": ["特雷西娅", "特蕾西娅", "Theresia"],
-        "hint": "触发语音发送的关键词列表"
-      }
-    }
+  "command.keywords": {
+    "type": "array",
+    "default": ["特雷西娅", "特蕾西娅", "Theresia"],
+    "label": "触发关键词",
+    "description": "消息包含这些词时自动发送语音"
   },
-  "voice": {
-    "description": "语音配置",
-    "type": "object",
-    "hint": "设置语音相关参数",
-    "items": {
-      "quality": {
-        "description": "语音质量",
-        "type": "string",
-        "default": "high",
-        "options": ["high", "medium", "low"],
-        "hint": "语音质量，可选值：high（高质量）、medium（中等质量）、low（低质量）"
-      },
-      "default_tag": {
-        "description": "默认标签",
-        "type": "string",
-        "default": "",
-        "hint": "默认的语音标签，为空表示所有语音"
-      }
-    }
+  "voice.default_tag": {
+    "type": "string",
+    "default": "",
+    "label": "默认标签",
+    "description": "关键词触发时优先使用此标签的语音（留空则随机）"
+  },
+  "schedule.enabled": {
+    "type": "boolean",
+    "default": false,
+    "label": "定时发送",
+    "description": "是否启用定时自动发送语音"
+  },
+  "schedule.time": {
+    "type": "string",
+    "default": "08:00",
+    "label": "发送时间",
+    "description": "格式 HH:MM，每天到达此时间触发"
+  },
+  "schedule.frequency": {
+    "type": "select",
+    "default": "daily",
+    "options": ["daily", "weekly", "hourly"],
+    "label": "发送频率",
+    "description": "daily=每天, weekly=每周, hourly=每小时"
+  },
+  "schedule.voice_tags": {
+    "type": "array",
+    "default": [],
+    "label": "定时语音标签",
+    "description": "留空随机发送，多个标签用逗号分隔"
+  },
+  "schedule.target_sessions": {
+    "type": "array",
+    "default": [],
+    "label": "定时发送目标群",
+    "description": "定时语音将发送到这些会话（通过 /theresia set_target 命令设置）"
   }
 }
