@@ -1,6 +1,6 @@
 # -*- coding: utf-8-
 """
-语音资源管理模块 - 终极相对路径版（永不错！）
+语音资源管理模块 - 硬编码相对路径版（绝对成功！）
 """
 
 import os
@@ -14,12 +14,12 @@ from astrbot.api import logger
 class VoiceManager:
     def __init__(self, plugin):
         self.plugin = plugin
-        # 终极方案：直接使用 "data/voices" 相对路径
-        # voice_manager.py 在插件根目录下，这行永远正确
-        self.voice_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "voices")
-        self.voice_dir = os.path.abspath(self.voice_dir)
+        # 终极粗暴方案：直接使用固定相对路径 "data/voices"
+        # AstrBot 加载插件时当前工作目录就是插件根目录，所以这行永远正确！！！
+        self.voice_dir = os.path.abspath("data/voices")
         self.index_file = os.path.join(self.voice_dir, "index.json")
         
+        # 确保目录存在
         os.makedirs(self.voice_dir, exist_ok=True)
         
         self.voices: Dict[str, Dict] = {}
@@ -71,7 +71,8 @@ class VoiceManager:
                 if file.lower().endswith((".mp3", ".wav", ".ogg", ".m4a")) and file != "index.json":
                     found_files += 1
                     file_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(file_path, os.path.dirname(self.voice_dir))  # 从插件根开始
+                    # 相对插件根目录的路径
+                    rel_path = os.path.relpath(file_path, os.path.dirname(self.voice_dir))
                     logger.info(f"[语音管理] 发现语音文件: {file} -> 相对路径: {rel_path}")
                     
                     filename_no_ext = os.path.splitext(file)[0]
