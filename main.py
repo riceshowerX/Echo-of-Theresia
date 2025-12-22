@@ -1,19 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Echo of Theresia - 主入口最终版（修复 @register）
+Echo of Theresia - 完全兼容当前 AstrBot 版本的最终版
 """
 
 from astrbot.api.star import Context, Star, register
 from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.event.filter import EventMessageType  # 关键导入
 from astrbot.api import logger
 from astrbot.api.message_components import Record
 
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
 
+# 使用位置参数注册（兼容你的 AstrBot 版本）
 @register(
     "echo_of_theresia",
-    "你的名字", 
+    "你的名字或昵称",  # 作者名，随便填
     "明日方舟特雷西娅角色语音插件",
     "1.0.0"
 )
@@ -33,7 +35,8 @@ class TheresiaVoicePlugin(Star):
         await self.scheduler.stop()
         logger.info("[Echo of Theresia] 插件已卸载")
 
-    @filter.message()
+    # 关键词触发（兼容旧版本，使用 EventMessageType.ALL）
+    @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         enabled = await self.context.config.get("enabled", True)
         if not enabled:
@@ -52,6 +55,7 @@ class TheresiaVoicePlugin(Star):
             if path:
                 yield event.chain([Record(file=path)])
 
+    # 主指令
     @filter.command("theresia")
     async def main_cmd(self, event: AstrMessageEvent):
         yield event.plain_result(
