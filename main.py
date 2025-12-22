@@ -50,7 +50,7 @@ class TheresiaVoicePlugin(Star):
         return f"/static/plugins/echo_of_theresia/voices/{filename}"
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str):
-        """完美兼容 QQ（AiocqhttpMessageEvent）直接发语音 + WebUI 显示链接"""
+        """终极兼容：根据平台类型优先发送真语音（QQ 直接语音，其他平台链接）"""
         if not rel_path:
             yield event.plain_result("未找到匹配的语音哦~")
             return
@@ -62,19 +62,21 @@ class TheresiaVoicePlugin(Star):
             yield event.plain_result("语音文件不存在哦~（路径异常）")
             return
 
-        logger.info(f"[语音发送] 正在发送语音文件: {abs_path}")
+        logger.info(f"[语音发送] 成功加载语音文件: {abs_path}")
 
-        # 判断事件类型：QQ 用 result，WebUI 用 plain_result
-        if hasattr(event, "result"):
-            # QQ（AiocqhttpMessageEvent）使用 event.result 发送消息链
+        # 关键修复：通过事件类型字符串判断是否为 QQ 平台
+        event_type = str(type(event))
+        is_qq = "AiocqhttpMessageEvent" in event_type or "aiocqhttp" in event_type.lower()
+
+        if is_qq:
+            # QQ 平台：强制使用 result 发送真实语音
+            logger.info("[语音发送] 检测到 QQ 平台，使用 result 发送真实语音")
             yield event.result([Record(file=abs_path)])
         else:
-            # WebUI 和其他平台：先尝试 chain，不行就发链接
-            if hasattr(event, "chain"):
-                yield event.chain([Record(file=abs_path)])
-            else:
-                voice_url = self._get_voice_url(rel_path)
-                yield event.plain_result(f"特雷西娅的语音：\n{voice_url}")
+            # WebUI 或其他平台：发送可点击播放的 URL
+            voice_url = self._get_voice_url(rel_path)
+            logger.info(f"[语音发送] 非 QQ 平台，使用 URL: {voice_url}")
+            yield event.plain_result(f"特雷西娅的语音：\n{voice_url}")
 
     # 关键词触发
     @filter.event_message_type(EventMessageType.ALL)
