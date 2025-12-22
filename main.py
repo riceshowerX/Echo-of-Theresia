@@ -133,8 +133,16 @@ class TheresiaVoicePlugin(Star):
     
     # 设置配置指令
     @theresia_group.command("set")
-    async def set_config(self, event: AstrMessageEvent, key: str, value: str):
+    async def set_config(self, event: AstrMessageEvent, *args):
         """设置插件配置项\n用法: /theresia set <config> <value>"""
+        # 检查参数
+        if len(args) < 2:
+            yield event.plain_result("用法: /theresia set <config> <value>")
+            return
+        
+        key = args[0]
+        value = args[1]
+        
         # 尝试转换值类型
         if value.lower() == "true":
             value = True
@@ -169,8 +177,13 @@ class TheresiaVoicePlugin(Star):
     
     # 发送语音指令
     @theresia_group.command("voice")
-    async def send_voice(self, event: AstrMessageEvent, tag: str = ""):
+    async def send_voice(self, event: AstrMessageEvent, *args):
         """发送随机语音，可选指定标签\n用法: /theresia voice [tag]"""
+        # 获取标签参数
+        tag = ""
+        if args:
+            tag = args[0]
+        
         # 获取语音文件
         voice_path = self.voice_manager.get_voice(tag)
         if not voice_path:
@@ -228,7 +241,7 @@ class TheresiaVoicePlugin(Star):
     
     # 监听所有消息，检查关键词触发
     @filter.event_message_type(filter.EventMessageType.ALL)
-    async def handle_message(self, event: AstrMessageEvent):
+    async def handle_message(self, event: AstrMessageEvent, *args):
         """处理收到的消息，检查关键词触发"""
         # 使用缓存的配置
         config = self._config_cache
