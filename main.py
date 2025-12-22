@@ -1,6 +1,6 @@
-# -*- coding: utf-8-
+# -*- coding: utf-8 -*-
 """
-Echo of Theresia - 兼容原 voice_manager 相对路径版（最终完美版）
+Echo of Theresia - 最终完美版（QQ 直接发语音 + 兼容原 voice_manager）
 """
 
 from astrbot.api.star import Context, Star, register
@@ -18,7 +18,7 @@ import os
     "echo_of_theresia",
     "特雷西娅",
     "明日方舟特雷西娅角色语音插件",
-    "1.0.4"
+    "1.0.5"
 )
 class TheresiaVoicePlugin(Star):
     def __init__(self, context: Context, config=None):
@@ -27,7 +27,7 @@ class TheresiaVoicePlugin(Star):
         self.voice_manager = VoiceManager(self)
         self.scheduler = VoiceScheduler(self, self.voice_manager)
 
-        # 计算插件根目录（用于将相对路径转为绝对路径）
+        # 计算插件根目录，用于将相对路径转为绝对路径
         self.plugin_root = os.path.dirname(os.path.abspath(__file__))
 
     async def initialize(self) -> None:
@@ -41,19 +41,16 @@ class TheresiaVoicePlugin(Star):
         logger.info("[Echo of Theresia] 插件已卸载")
 
     def _rel_to_abs(self, rel_path: str) -> str:
-        """
-        将 voice_manager 返回的相对路径（如 data/voices/问候.wav）
-        转换为绝对路径
-        """
+        """将 voice_manager 返回的相对路径转换为绝对路径"""
         return os.path.abspath(os.path.join(self.plugin_root, rel_path))
 
     def _get_voice_url(self, rel_path: str) -> str:
-        """生成 WebUI 可访问的语音 URL"""
+        """为 WebUI 生成静态资源 URL"""
         filename = os.path.basename(rel_path)
         return f"/static/plugins/echo_of_theresia/voices/{filename}"
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str):
-        """安全发送语音：处理相对路径 → 绝对路径"""
+        """优先发送真实语音消息（QQ 会直接发语音，WebUI 自动降级）"""
         if not rel_path:
             yield event.plain_result("未找到匹配的语音哦~")
             return
@@ -61,17 +58,21 @@ class TheresiaVoicePlugin(Star):
         abs_path = self._rel_to_abs(rel_path)
 
         if not os.path.exists(abs_path):
-            logger.warning(f"[语音发送] 文件不存在: {abs_path} (来自相对路径: {rel_path})")
-            yield event.plain_result("语音文件不存在哦~（可能路径异常）")
+            logger.warning(f"[语音发送] 文件不存在: {abs_path} (相对路径: {rel_path})")
+            yield event.plain_result("语音文件不存在哦~（路径异常）")
             return
 
-        # 支持 chain 的平台（如 QQ、Telegram）直接发送文件
-        if hasattr(event, "chain"):
-            yield event.chain([Record(file=abs_path)])
-        else:
-            # WebUI 等平台：发送可播放的 URL
-            voice_url = self._get_voice_url(rel_path)
-            yield event.plain_result(f"特雷西娅的语音：\n{voice_url}")
+        logger.info(f"[语音发送] 正在发送语音文件: {abs_path}")
+
+        # 关键：直接使用 chain 发送本地文件
+        # 支持的平台（如 QQ）会直接上传并发送语音消息
+        # 不支持的平台（如 WebUI）AstrBot 核心会自动降级为文字或 URL
+        yield event.chain([Record(file=abs_path)])
+
+        # 可选：为 WebUI 额外补一个可点击的 URL（防止某些情况下 chain 被忽略）
+        # 如果你发现 WebUI 完全没反应，可以取消下面注释
+        # voice_url = self._get_voice_url(rel_path)
+        # yield event.plain_result(f"（Web 播放地址：{voice_url}）")
 
     # 关键词触发
     @filter.event_message_type(EventMessageType.ALL)
