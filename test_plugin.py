@@ -20,6 +20,22 @@ try:
     if hasattr(TheresiaVoicePlugin, 'on_load'):
         print("✅ 插件类包含on_load方法")
     
+    # 检查语音管理器
+    from voice_manager import VoiceManager
+    print("✅ VoiceManager导入成功")
+    
+    # 检查调度器
+    from scheduler import VoiceScheduler
+    print("✅ VoiceScheduler导入成功")
+    
+    # 检查命令处理器
+    from command_handler import CommandHandler
+    print("✅ CommandHandler导入成功")
+    
+    # 检查配置管理
+    from config import Config
+    print("✅ Config导入成功")
+    
     print("\n测试完成：插件结构正确，可以正常加载")
     
 except ImportError as e:

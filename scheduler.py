@@ -38,8 +38,8 @@ class VoiceScheduler:
         """定时任务循环"""
         while self.running:
             try:
-                # 获取配置
-                config = await self.plugin.context.config.get_all_config()
+                # 使用缓存的配置
+                config = self.plugin._config_cache
                 
                 # 检查插件和定时任务是否启用
                 if not config.get("enabled", True) or not config.get("schedule", {}).get("enabled", False):

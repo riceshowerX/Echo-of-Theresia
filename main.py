@@ -25,6 +25,7 @@ from .scheduler import VoiceScheduler
 @register(
     name="echo_of_theresia",
     author="AstrBot Dev",
+    desc="明日方舟特雷西娅角色语音插件，支持定时发送和对话触发功能",
     version="1.0.0"
 )
 class TheresiaVoicePlugin(Star):
@@ -36,10 +37,16 @@ class TheresiaVoicePlugin(Star):
         # 初始化插件组件
         self.voice_manager = VoiceManager(self)
         self.scheduler = VoiceScheduler(self, self.voice_manager)
+        
+        # 缓存配置，避免频繁异步获取
+        self._config_cache = {}
     
-    def on_load(self) -> None:
+    async def on_load(self) -> None:
         """插件加载时执行"""
         logger.info(f"[{self.name}] 插件加载中...")
+        
+        # 加载配置缓存
+        self._config_cache = await self.context.config.get_all_config()
         
         # 加载语音资源
         self.voice_manager.load_voices()
@@ -70,6 +77,8 @@ class TheresiaVoicePlugin(Star):
         """启用特雷西娅语音插件"""
         # 设置配置
         await self.context.config.set_config("enabled", True)
+        # 更新配置缓存
+        self._config_cache["enabled"] = True
         # 启动定时任务
         self.scheduler.start()
         yield event.plain_result("特雷西娅语音插件已启用")
@@ -80,6 +89,8 @@ class TheresiaVoicePlugin(Star):
         """禁用特雷西娅语音插件"""
         # 设置配置
         await self.context.config.set_config("enabled", False)
+        # 更新配置缓存
+        self._config_cache["enabled"] = False
         # 停止定时任务
         self.scheduler.stop()
         yield event.plain_result("特雷西娅语音插件已禁用")
@@ -130,6 +141,16 @@ class TheresiaVoicePlugin(Star):
         
         # 设置配置
         await self.context.config.set_config(key, value)
+        
+        # 更新配置缓存
+        keys = key.split(".")
+        config = self._config_cache
+        for k in keys[:-1]:
+            if k not in config:
+                config[k] = {}
+            config = config[k]
+        config[keys[-1]] = value
+        
         yield event.plain_result(f"配置已更新: {key} = {value}")
         
         # 如果是定时相关配置，重启定时任务
@@ -199,8 +220,8 @@ class TheresiaVoicePlugin(Star):
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def handle_message(self, event: AstrMessageEvent):
         """处理收到的消息，检查关键词触发"""
-        # 获取配置
-        config = await self.context.config.get_all_config()
+        # 使用缓存的配置
+        config = self._config_cache
         
         # 检查插件是否启用
         if not config.get("enabled", True):

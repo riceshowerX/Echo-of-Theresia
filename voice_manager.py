@@ -114,6 +114,13 @@ class VoiceManager:
         else:
             return "low"
     
+    def _is_quality_sufficient(self, current_quality: str, required_quality: str) -> bool:
+        """检查语音质量是否满足要求"""
+        quality_levels = {"low": 1, "medium": 2, "high": 3}
+        current_level = quality_levels.get(current_quality, 1)
+        required_level = quality_levels.get(required_quality, 1)
+        return current_level >= required_level
+    
     def _save_index(self) -> None:
         """保存语音索引"""
         try:
@@ -141,7 +148,7 @@ class VoiceManager:
                 # 由于配置需要异步获取，这里使用默认值"high"
                 # 在实际使用中，插件会在初始化时将配置缓存到voice_manager实例中
                 quality_requirement = "high"
-                if voice_info.get("quality") >= quality_requirement:
+                if self._is_quality_sufficient(voice_info.get("quality"), quality_requirement):
                     filtered_voices.append(voice_path)
         
         if not filtered_voices:
@@ -155,8 +162,10 @@ class VoiceManager:
         """获取所有可用标签"""
         return sorted(list(self.tags))
     
-    def add_voice(self, file_path: str, tags: List[str] = []) -> bool:
+    def add_voice(self, file_path: str, tags: List[str] = None) -> bool:
         """添加语音文件"""
+        if tags is None:
+            tags = []
         if not os.path.exists(file_path):
             return False
         
