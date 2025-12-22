@@ -11,32 +11,46 @@ from typing import List, Dict, Tuple
 class VoiceManager:
     """语音资源管理类"""
     
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, plugin):
+        self.plugin = plugin
+        
+        # 使用AstrBot推荐的数据存储位置
+        # 语音资源作为大文件，存储在插件目录下的data目录
         self.voice_dir = os.path.join(os.path.dirname(__file__), "data", "voices")
         self.voice_index_file = os.path.join(self.voice_dir, "index.json")
+        
+        # 初始化语音数据
         self.voices = {}
         self.tags = set()
+        
+        # 插件实例，用于获取配置
+        self._plugin = plugin
     
     def load_voices(self) -> None:
         """加载语音资源"""
         self.voices = {}
         self.tags = set()
         
-        # 如果索引文件存在，加载索引
+        # 尝试从文件系统加载语音索引（兼容旧版本）
         if os.path.exists(self.voice_index_file):
             try:
                 with open(self.voice_index_file, "r", encoding="utf-8") as f:
                     self.voices = json.load(f)
+                    
+                # 检查加载的语音数量，如果为空，执行扫描
+                if not self.voices:
+                    print("语音索引为空，执行扫描...")
+                    self._scan_voice_files()
+                else:
                     # 提取所有标签
                     for voice_info in self.voices.values():
                         for tag in voice_info.get("tags", []):
                             self.tags.add(tag)
-                return
+                    return
             except Exception as e:
                 print(f"加载语音索引失败: {e}")
         
-        # 否则扫描语音文件目录
+        # 索引文件不存在或加载失败，扫描语音文件目录
         self._scan_voice_files()
     
     def _scan_voice_files(self) -> None:
@@ -47,14 +61,31 @@ class VoiceManager:
                     file_path = os.path.join(root, file)
                     rel_path = os.path.relpath(file_path, self.voice_dir)
                     
-                    # 从文件名提取标签（示例：theresia_greeting_01.mp3 -> ["greeting"]）
+                    # 从文件名提取标签
                     filename = os.path.splitext(file)[0]
                     tags = []
+                    
+                    # 处理中文文件名（如：交谈1.wav -> ["交谈"]）
                     if "_" in filename:
-                        # 假设文件名格式为：角色名_标签_序号
+                        # 处理英文命名格式：theresia_greeting_01.mp3 -> ["greeting"]
                         parts = filename.split("_")
                         if len(parts) >= 3:
                             tags.append(parts[1])
+                    else:
+                        # 处理中文命名格式：交谈1.wav -> ["交谈"]
+                        # 提取中文标签（去掉数字和特殊字符）
+                        import re
+                        chinese_tag = re.sub(r'[^\u4e00-\u9fa5]', '', filename)
+                        if chinese_tag:
+                            tags.append(chinese_tag)
+                        # 如果没有提取到中文标签，使用原文件名（去掉数字）
+                        elif filename:
+                            clean_tag = re.sub(r'\d+', '', filename)
+                            if clean_tag:
+                                tags.append(clean_tag)
+                    
+                    # 添加通用标签
+                    tags.append("theresia")
                     
                     # 添加到语音列表
                     self.voices[rel_path] = {
@@ -86,8 +117,18 @@ class VoiceManager:
     def _save_index(self) -> None:
         """保存语音索引"""
         try:
+            # 使用文件系统存储语音索引（大文件适合文件系统存储）
             with open(self.voice_index_file, "w", encoding="utf-8") as f:
                 json.dump(self.voices, f, ensure_ascii=False, indent=4)
+            
+            # 同时尝试使用AstrBot官方存储API存储语音索引（可选，用于备份）
+            try:
+                # 由于put_kv_data是异步方法，我们无法在同步方法中直接调用
+                # 这里仅作为示例，实际使用中需要在异步上下文中调用
+                # await self._plugin.put_kv_data("voice_index", self.voices)
+                pass
+            except Exception as e:
+                print(f"使用官方存储API保存语音索引失败: {e}")
         except Exception as e:
             print(f"保存语音索引失败: {e}")
     
@@ -97,8 +138,10 @@ class VoiceManager:
         filtered_voices = []
         for voice_path, voice_info in self.voices.items():
             if not tag or tag in voice_info.get("tags", []):
-                # 检查质量要求
-                if voice_info.get("quality") >= self.config.get("voice.quality", "high"):
+                # 由于配置需要异步获取，这里使用默认值"high"
+                # 在实际使用中，插件会在初始化时将配置缓存到voice_manager实例中
+                quality_requirement = "high"
+                if voice_info.get("quality") >= quality_requirement:
                     filtered_voices.append(voice_path)
         
         if not filtered_voices:

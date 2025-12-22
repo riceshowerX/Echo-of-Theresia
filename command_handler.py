@@ -8,9 +8,10 @@ from typing import Dict, Any, List
 class CommandHandler:
     """命令处理类"""
     
-    def __init__(self, plugin, config, voice_manager, scheduler):
+    def __init__(self, plugin, voice_manager, scheduler):
         self.plugin = plugin
-        self.config = config
+        # 使用AstrBot官方的配置管理
+        self.config = plugin.config
         self.voice_manager = voice_manager
         self.scheduler = scheduler
     

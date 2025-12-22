@@ -26,23 +26,51 @@ class TheresiaVoicePlugin(Plugin):
     
     def __init__(self):
         super().__init__()
-        self.name = "echo_of_theresia"
+        # 使用官方规范的插件名称
+        self.name = "astrbot_plugin_theresia_voice"
         self.version = "1.0.0"
-        self.description = "明日方舟特雷西娅角色语音插件 - Echo of Theresia"
+        self.description = "明日方舟特雷西娅角色语音插件，支持定时发送和对话触发功能"
         self.author = "AstrBot Dev"
         
+        # 初始化默认配置（使用官方配置机制）
+        self._init_default_config()
+        
         # 初始化插件组件
-        self.config = Config()
-        self.voice_manager = VoiceManager(self.config)
-        self.scheduler = VoiceScheduler(self, self.config, self.voice_manager)
-        self.command_handler = CommandHandler(self, self.config, self.voice_manager, self.scheduler)
+        # 使用AstrBot官方的self.config属性进行配置管理
+        self.voice_manager = VoiceManager(self)
+        self.scheduler = VoiceScheduler(self, self.voice_manager)
+        self.command_handler = CommandHandler(self, self.voice_manager, self.scheduler)
+    
+    def _init_default_config(self) -> None:
+        """初始化默认配置"""
+        # 使用AstrBot官方的配置机制，自动处理配置的加载和保存
+        # 设置默认配置
+        default_config = {
+            "enabled": True,
+            "schedule": {
+                "enabled": False,
+                "time": "08:00",
+                "frequency": "daily",  # daily, weekly, hourly
+                "voice_tags": []  # 空列表表示所有语音
+            },
+            "command": {
+                "prefix": "/theresia",
+                "keywords": ["特雷西娅", "特蕾西娅", "Theresia"]
+            },
+            "voice": {
+                "quality": "high",  # high, medium, low
+                "default_tag": ""
+            }
+        }
+        
+        # AstrBot会自动合并默认配置和用户配置
+        for key, value in default_config.items():
+            if key not in self.config:
+                self.config[key] = value
     
     def on_load(self) -> None:
         """插件加载时执行"""
         logger.info(f"[{self.name}] 插件加载中...")
-        
-        # 加载配置
-        self.config.load()
         
         # 加载语音资源
         self.voice_manager.load_voices()
@@ -61,7 +89,11 @@ class TheresiaVoicePlugin(Plugin):
         
         logger.info(f"[{self.name}] 插件卸载完成")
     
-    async def on_message(self, message: Dict[str, Any]) -> None:
+    # 使用AstrBot官方的消息事件装饰器
+    from astrbot.event import event
+    
+    @event.receive_message
+    async def handle_message(self, message: Dict[str, Any]) -> None:
         """处理收到的消息"""
         await self.command_handler.handle_message(message)
     
@@ -77,5 +109,5 @@ class TheresiaVoicePlugin(Plugin):
             "/theresia update": "更新语音资源"
         }
 
-# 注册插件
-plugin.register_plugin("echo_of_theresia", TheresiaVoicePlugin)
+# 注册插件 - 使用官方规范的插件名称
+plugin.register_plugin("astrbot_plugin_theresia_voice", TheresiaVoicePlugin)

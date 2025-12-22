@@ -1,0 +1,34 @@
+name: echo_of_theresia
+display_name: Echo of Theresia
+version: "1.0.0"
+description: 明日方舟特雷西娅角色语音插件，支持定时发送和对话触发功能
+author: AstrBot Dev
+license: MIT
+# 插件依赖（可选）
+dependencies: []
+# 插件支持的平台（可选）
+supported_platforms: []
+# 插件分类（可选）
+categories: ["game", "entertainment"]
+# 插件图标（可选，相对于插件目录的路径）
+icon: logo.png
+# 插件主页（可选）
+homepage: ""
+# 插件文档（可选）
+documentation: ""
+# 插件仓库（可选）
+repository: ""
+# 插件更新日志（可选）
+changelog:
+  - version: "1.0.0"
+    changes:
+      - 初始版本
+      - 实现定时发送功能
+      - 实现对话触发功能
+      - 支持语音资源管理
+# 插件是否需要管理员权限（可选）
+require_admin: false
+# 插件是否为实验性（可选）
+experimental: false
+# 插件是否隐藏（可选）
+hidden: false

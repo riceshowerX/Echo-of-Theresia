@@ -1,0 +1,79 @@
+{
+  "enabled": {
+    "description": "插件启用状态",
+    "type": "bool",
+    "default": true,
+    "hint": "控制插件是否启用"
+  },
+  "schedule": {
+    "description": "定时发送配置",
+    "type": "object",
+    "hint": "设置定时发送相关参数",
+    "items": {
+      "enabled": {
+        "description": "定时发送开关",
+        "type": "bool",
+        "default": false,
+        "hint": "是否启用定时发送功能"
+      },
+      "time": {
+        "description": "发送时间",
+        "type": "string",
+        "default": "08:00",
+        "hint": "定时发送的时间，格式为HH:MM"
+      },
+      "frequency": {
+        "description": "发送频率",
+        "type": "string",
+        "default": "daily",
+        "options": ["daily", "weekly", "hourly"],
+        "hint": "定时发送的频率，可选值：daily（每日）、weekly（每周）、hourly（每小时）"
+      },
+      "voice_tags": {
+        "description": "语音标签",
+        "type": "list",
+        "default": [],
+        "hint": "定时发送的语音标签，空列表表示所有语音"
+      }
+    }
+  },
+  "command": {
+    "description": "命令配置",
+    "type": "object",
+    "hint": "设置命令相关参数",
+    "items": {
+      "prefix": {
+        "description": "命令前缀",
+        "type": "string",
+        "default": "/theresia",
+        "hint": "插件命令的前缀"
+      },
+      "keywords": {
+        "description": "触发关键词",
+        "type": "list",
+        "default": ["特雷西娅", "特蕾西娅", "Theresia"],
+        "hint": "触发语音发送的关键词列表"
+      }
+    }
+  },
+  "voice": {
+    "description": "语音配置",
+    "type": "object",
+    "hint": "设置语音相关参数",
+    "items": {
+      "quality": {
+        "description": "语音质量",
+        "type": "string",
+        "default": "high",
+        "options": ["high", "medium", "low"],
+        "hint": "语音质量，可选值：high（高质量）、medium（中等质量）、low（低质量）"
+      },
+      "default_tag": {
+        "description": "默认标签",
+        "type": "string",
+        "default": "",
+        "hint": "默认的语音标签，为空表示所有语音"
+      }
+    }
+  }
+}

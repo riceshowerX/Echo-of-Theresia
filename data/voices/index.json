@@ -1,1 +1,382 @@
-{}
+{
+    "3星结束行动.wav": {
+        "path": "3星结束行动.wav",
+        "filename": "3星结束行动.wav",
+        "tags": [
+            "星结束行动",
+            "theresia"
+        ],
+        "size": 757096,
+        "quality": "medium"
+    },
+    "交谈1.wav": {
+        "path": "交谈1.wav",
+        "filename": "交谈1.wav",
+        "tags": [
+            "交谈",
+            "theresia"
+        ],
+        "size": 2221810,
+        "quality": "high"
+    },
+    "交谈2.wav": {
+        "path": "交谈2.wav",
+        "filename": "交谈2.wav",
+        "tags": [
+            "交谈",
+            "theresia"
+        ],
+        "size": 2236750,
+        "quality": "high"
+    },
+    "交谈3.wav": {
+        "path": "交谈3.wav",
+        "filename": "交谈3.wav",
+        "tags": [
+            "交谈",
+            "theresia"
+        ],
+        "size": 2176210,
+        "quality": "high"
+    },
+    "任命助理.wav": {
+        "path": "任命助理.wav",
+        "filename": "任命助理.wav",
+        "tags": [
+            "任命助理",
+            "theresia"
+        ],
+        "size": 1043190,
+        "quality": "medium"
+    },
+    "任命队长.wav": {
+        "path": "任命队长.wav",
+        "filename": "任命队长.wav",
+        "tags": [
+            "任命队长",
+            "theresia"
+        ],
+        "size": 310212,
+        "quality": "low"
+    },
+    "作战中1.wav": {
+        "path": "作战中1.wav",
+        "filename": "作战中1.wav",
+        "tags": [
+            "作战中",
+            "theresia"
+        ],
+        "size": 323846,
+        "quality": "low"
+    },
+    "作战中2.wav": {
+        "path": "作战中2.wav",
+        "filename": "作战中2.wav",
+        "tags": [
+            "作战中",
+            "theresia"
+        ],
+        "size": 330848,
+        "quality": "low"
+    },
+    "作战中3.wav": {
+        "path": "作战中3.wav",
+        "filename": "作战中3.wav",
+        "tags": [
+            "作战中",
+            "theresia"
+        ],
+        "size": 374960,
+        "quality": "low"
+    },
+    "作战中4.wav": {
+        "path": "作战中4.wav",
+        "filename": "作战中4.wav",
+        "tags": [
+            "作战中",
+            "theresia"
+        ],
+        "size": 300698,
+        "quality": "low"
+    },
+    "信赖提升后交谈1.wav": {
+        "path": "信赖提升后交谈1.wav",
+        "filename": "信赖提升后交谈1.wav",
+        "tags": [
+            "信赖提升后交谈",
+            "theresia"
+        ],
+        "size": 2612200,
+        "quality": "high"
+    },
+    "信赖提升后交谈2.wav": {
+        "path": "信赖提升后交谈2.wav",
+        "filename": "信赖提升后交谈2.wav",
+        "tags": [
+            "信赖提升后交谈",
+            "theresia"
+        ],
+        "size": 2922958,
+        "quality": "high"
+    },
+    "信赖提升后交谈3.wav": {
+        "path": "信赖提升后交谈3.wav",
+        "filename": "信赖提升后交谈3.wav",
+        "tags": [
+            "信赖提升后交谈",
+            "theresia"
+        ],
+        "size": 3314076,
+        "quality": "high"
+    },
+    "信赖触摸.wav": {
+        "path": "信赖触摸.wav",
+        "filename": "信赖触摸.wav",
+        "tags": [
+            "信赖触摸",
+            "theresia"
+        ],
+        "size": 295952,
+        "quality": "low"
+    },
+    "周年庆典.wav": {
+        "path": "周年庆典.wav",
+        "filename": "周年庆典.wav",
+        "tags": [
+            "周年庆典",
+            "theresia"
+        ],
+        "size": 2975202,
+        "quality": "high"
+    },
+    "完成高难行动.wav": {
+        "path": "完成高难行动.wav",
+        "filename": "完成高难行动.wav",
+        "tags": [
+            "完成高难行动",
+            "theresia"
+        ],
+        "size": 730094,
+        "quality": "medium"
+    },
+    "干员报到.wav": {
+        "path": "干员报到.wav",
+        "filename": "干员报到.wav",
+        "tags": [
+            "干员报到",
+            "theresia"
+        ],
+        "size": 107952,
+        "quality": "low"
+    },
+    "戳一下.wav": {
+        "path": "戳一下.wav",
+        "filename": "戳一下.wav",
+        "tags": [
+            "戳一下",
+            "theresia"
+        ],
+        "size": 233210,
+        "quality": "low"
+    },
+    "新年祝福.wav": {
+        "path": "新年祝福.wav",
+        "filename": "新年祝福.wav",
+        "tags": [
+            "新年祝福",
+            "theresia"
+        ],
+        "size": 2807262,
+        "quality": "high"
+    },
+    "晋升后交谈1.wav": {
+        "path": "晋升后交谈1.wav",
+        "filename": "晋升后交谈1.wav",
+        "tags": [
+            "晋升后交谈",
+            "theresia"
+        ],
+        "size": 2581782,
+        "quality": "high"
+    },
+    "晋升后交谈2.wav": {
+        "path": "晋升后交谈2.wav",
+        "filename": "晋升后交谈2.wav",
+        "tags": [
+            "晋升后交谈",
+            "theresia"
+        ],
+        "size": 3092054,
+        "quality": "high"
+    },
+    "标题.wav": {
+        "path": "标题.wav",
+        "filename": "标题.wav",
+        "tags": [
+            "标题",
+            "theresia"
+        ],
+        "size": 90554,
+        "quality": "low"
+    },
+    "生日.wav": {
+        "path": "生日.wav",
+        "filename": "生日.wav",
+        "tags": [
+            "生日",
+            "theresia"
+        ],
+        "size": 2939992,
+        "quality": "high"
+    },
+    "精英化晋升1.wav": {
+        "path": "精英化晋升1.wav",
+        "filename": "精英化晋升1.wav",
+        "tags": [
+            "精英化晋升",
+            "theresia"
+        ],
+        "size": 2370620,
+        "quality": "high"
+    },
+    "精英化晋升2.wav": {
+        "path": "精英化晋升2.wav",
+        "filename": "精英化晋升2.wav",
+        "tags": [
+            "精英化晋升",
+            "theresia"
+        ],
+        "size": 1212398,
+        "quality": "high"
+    },
+    "编入队伍.wav": {
+        "path": "编入队伍.wav",
+        "filename": "编入队伍.wav",
+        "tags": [
+            "编入队伍",
+            "theresia"
+        ],
+        "size": 529610,
+        "quality": "medium"
+    },
+    "行动出发.wav": {
+        "path": "行动出发.wav",
+        "filename": "行动出发.wav",
+        "tags": [
+            "行动出发",
+            "theresia"
+        ],
+        "size": 362256,
+        "quality": "low"
+    },
+    "行动失败.wav": {
+        "path": "行动失败.wav",
+        "filename": "行动失败.wav",
+        "tags": [
+            "行动失败",
+            "theresia"
+        ],
+        "size": 661924,
+        "quality": "medium"
+    },
+    "行动开始.wav": {
+        "path": "行动开始.wav",
+        "filename": "行动开始.wav",
+        "tags": [
+            "行动开始",
+            "theresia"
+        ],
+        "size": 265966,
+        "quality": "low"
+    },
+    "观看作战记录.wav": {
+        "path": "观看作战记录.wav",
+        "filename": "观看作战记录.wav",
+        "tags": [
+            "观看作战记录",
+            "theresia"
+        ],
+        "size": 383026,
+        "quality": "low"
+    },
+    "进驻设施.wav": {
+        "path": "进驻设施.wav",
+        "filename": "进驻设施.wav",
+        "tags": [
+            "进驻设施",
+            "theresia"
+        ],
+        "size": 391714,
+        "quality": "low"
+    },
+    "选中干员1.wav": {
+        "path": "选中干员1.wav",
+        "filename": "选中干员1.wav",
+        "tags": [
+            "选中干员",
+            "theresia"
+        ],
+        "size": 297384,
+        "quality": "low"
+    },
+    "选中干员2.wav": {
+        "path": "选中干员2.wav",
+        "filename": "选中干员2.wav",
+        "tags": [
+            "选中干员",
+            "theresia"
+        ],
+        "size": 255096,
+        "quality": "low"
+    },
+    "部署1.wav": {
+        "path": "部署1.wav",
+        "filename": "部署1.wav",
+        "tags": [
+            "部署",
+            "theresia"
+        ],
+        "size": 328722,
+        "quality": "low"
+    },
+    "部署2.wav": {
+        "path": "部署2.wav",
+        "filename": "部署2.wav",
+        "tags": [
+            "部署",
+            "theresia"
+        ],
+        "size": 395836,
+        "quality": "low"
+    },
+    "问候.wav": {
+        "path": "问候.wav",
+        "filename": "问候.wav",
+        "tags": [
+            "问候",
+            "theresia"
+        ],
+        "size": 681216,
+        "quality": "medium"
+    },
+    "闲置.wav": {
+        "path": "闲置.wav",
+        "filename": "闲置.wav",
+        "tags": [
+            "闲置",
+            "theresia"
+        ],
+        "size": 1229014,
+        "quality": "high"
+    },
+    "非3星结束行动.wav": {
+        "path": "非3星结束行动.wav",
+        "filename": "非3星结束行动.wav",
+        "tags": [
+            "非星结束行动",
+            "theresia"
+        ],
+        "size": 836112,
+        "quality": "medium"
+    }
+}
