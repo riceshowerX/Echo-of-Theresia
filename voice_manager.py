@@ -25,6 +25,9 @@ class VoiceManager:
         
         # 插件实例，用于获取配置
         self._plugin = plugin
+        
+        # 配置缓存
+        self._config_cache = {}
     
     def load_voices(self) -> None:
         """加载语音资源"""
@@ -139,15 +142,18 @@ class VoiceManager:
         except Exception as e:
             print(f"保存语音索引失败: {e}")
     
+    def update_config(self, config: Dict[str, Any]) -> None:
+        """更新配置缓存"""
+        self._config_cache = config
+    
     def get_voice(self, tag: str = "") -> str:
         """获取随机语音文件路径"""
         # 过滤符合条件的语音
         filtered_voices = []
         for voice_path, voice_info in self.voices.items():
             if not tag or tag in voice_info.get("tags", []):
-                # 由于配置需要异步获取，这里使用默认值"high"
-                # 在实际使用中，插件会在初始化时将配置缓存到voice_manager实例中
-                quality_requirement = "high"
+                # 获取语音质量要求，默认为"low"
+                quality_requirement = self._config_cache.get("voice", {}).get("quality", "low")
                 if self._is_quality_sufficient(voice_info.get("quality"), quality_requirement):
                     filtered_voices.append(voice_path)
         

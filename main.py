@@ -48,6 +48,9 @@ class TheresiaVoicePlugin(Star):
         # 加载配置缓存
         self._config_cache = await self.context.config.get_all_config()
         
+        # 更新VoiceManager的配置缓存
+        self.voice_manager.update_config(self._config_cache)
+        
         # 加载语音资源
         self.voice_manager.load_voices()
         
@@ -79,6 +82,8 @@ class TheresiaVoicePlugin(Star):
         await self.context.config.set_config("enabled", True)
         # 更新配置缓存
         self._config_cache["enabled"] = True
+        # 更新VoiceManager的配置缓存
+        self.voice_manager.update_config(self._config_cache)
         # 启动定时任务
         self.scheduler.start()
         yield event.plain_result("特雷西娅语音插件已启用")
@@ -91,6 +96,8 @@ class TheresiaVoicePlugin(Star):
         await self.context.config.set_config("enabled", False)
         # 更新配置缓存
         self._config_cache["enabled"] = False
+        # 更新VoiceManager的配置缓存
+        self.voice_manager.update_config(self._config_cache)
         # 停止定时任务
         self.scheduler.stop()
         yield event.plain_result("特雷西娅语音插件已禁用")
@@ -150,6 +157,9 @@ class TheresiaVoicePlugin(Star):
                 config[k] = {}
             config = config[k]
         config[keys[-1]] = value
+        
+        # 更新VoiceManager的配置缓存
+        self.voice_manager.update_config(self._config_cache)
         
         yield event.plain_result(f"配置已更新: {key} = {value}")
         
