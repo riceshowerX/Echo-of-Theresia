@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8-
 """
-语音资源管理模块 - 路径彻底修复版
+语音资源管理模块 - 相对路径终极版（永不路径错）
 """
 
 import os
@@ -14,13 +14,12 @@ from astrbot.api import logger
 class VoiceManager:
     def __init__(self, plugin):
         self.plugin = plugin
-        # 终极修复：正确获取插件根目录 echo_of_theresia/
-        # voice_manager.py 在插件根目录下，所以需要上两层
-        self.base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        self.voice_dir = os.path.join(self.base_dir, "data", "voices")
+        # 终极稳妥方案：使用相对路径 ./data/voices
+        # 当前文件在插件根目录下，./data/voices 永远正确
+        self.voice_dir = os.path.join(os.path.dirname(__file__), "..", "data", "voices")
+        self.voice_dir = os.path.abspath(self.voice_dir)  # 转为绝对路径
         self.index_file = os.path.join(self.voice_dir, "index.json")
         
-        # 确保目录存在
         os.makedirs(self.voice_dir, exist_ok=True)
         
         self.voices: Dict[str, Dict] = {}
@@ -28,13 +27,11 @@ class VoiceManager:
 
     async def load_voices(self) -> None:
         logger.info("[Echo of Theresia] 正在加载语音资源...")
-        logger.info(f"[语音管理] 插件根目录: {self.base_dir}")
-        logger.info(f"[语音管理] 语音目录绝对路径: {os.path.abspath(self.voice_dir)}")
+        logger.info(f"[语音管理] 语音目录绝对路径: {self.voice_dir}")
         
         self.voices.clear()
         self.tags.clear()
         
-        # 尝试加载已有索引
         if os.path.exists(self.index_file):
             try:
                 with open(self.index_file, "r", encoding="utf-8") as f:
@@ -48,7 +45,6 @@ class VoiceManager:
             except Exception as e:
                 logger.warning(f"[语音管理] 索引文件损坏，将重新扫描: {e}")
 
-        # 索引不存在或损坏 → 重新扫描
         await self._scan_voices()
         logger.info(f"[Echo of Theresia] 扫描完成，共 {len(self.voices)} 条语音")
 
@@ -59,12 +55,11 @@ class VoiceManager:
             logger.warning(f"[语音管理] 语音目录不存在: {self.voice_dir}")
             return
         
-        # 列出目录内容用于调试
         try:
             content = os.listdir(self.voice_dir)
             logger.info(f"[语音管理] voices 目录内容: {content}")
         except Exception as e:
-            logger.error(f"[语音管理] 无法读取 voices 目录: {e}")
+            logger.error(f"[语音管理] 无法读取目录: {e}")
             return
 
         found_files = 0
@@ -76,7 +71,9 @@ class VoiceManager:
                 if file.lower().endswith((".mp3", ".wav", ".ogg", ".m4a")) and file != "index.json":
                     found_files += 1
                     file_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(file_path, self.base_dir)
+                    # 相对插件根目录的路径（从 voice_dir 的上层开始算）
+                    plugin_root = os.path.dirname(self.voice_dir)  # echo_of_theresia/
+                    rel_path = os.path.relpath(file_path, plugin_root)
                     logger.info(f"[语音管理] 发现语音文件: {file} -> 相对路径: {rel_path}")
                     
                     filename_no_ext = os.path.splitext(file)[0]
@@ -100,7 +97,7 @@ class VoiceManager:
             self._save_index()
             logger.info(f"[语音管理] 已保存索引到: {self.index_file}")
         else:
-            logger.warning("[语音管理] 未发现任何语音文件，索引未保存")
+            logger.warning("[语音管理] 未发现任何语音文件")
 
     def _extract_tags(self, filename: str) -> List[str]:
         tags = []
@@ -131,7 +128,7 @@ class VoiceManager:
         try:
             with open(self.index_file, "w", encoding="utf-8") as f:
                 json.dump(self.voices, f, ensure_ascii=False, indent=4)
-            logger.info(f"[语音管理] 索引保存成功: {self.index_file}")
+            logger.info(f"[语音管理] 索引保存成功")
         except Exception as e:
             logger.error(f"[语音管理] 保存索引失败: {e}")
 
