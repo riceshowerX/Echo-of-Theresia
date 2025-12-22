@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-语音资源管理模块 - 优化最终版（增强日志 + 健壮扫描）
+语音资源管理模块 - 路径修复最终版
 """
 
 import os
@@ -14,8 +14,8 @@ from astrbot.api import logger
 class VoiceManager:
     def __init__(self, plugin):
         self.plugin = plugin
-        # 插件根目录（main.py 同级）
-        self.base_dir = os.path.dirname(os.path.dirname(__file__))
+        # 修复：正确获取插件根目录 (echo_of_theresia/)
+        self.base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         self.voice_dir = os.path.join(self.base_dir, "data", "voices")
         self.index_file = os.path.join(self.voice_dir, "index.json")
         
@@ -27,6 +27,7 @@ class VoiceManager:
 
     async def load_voices(self) -> None:
         logger.info("[Echo of Theresia] 正在加载语音资源...")
+        logger.info(f"[语音管理] 插件根目录: {self.base_dir}")
         logger.info(f"[语音管理] 语音目录绝对路径: {os.path.abspath(self.voice_dir)}")
         
         self.voices.clear()
@@ -75,20 +76,20 @@ class VoiceManager:
                 if file.lower().endswith((".mp3", ".wav", ".ogg", ".m4a")) and file != "index.json":
                     found_files += 1
                     file_path = os.path.join(root, file)
-                    # 相对插件根目录的路径（AstrBot Record 支持）
+                    # 相对插件根目录的路径
                     rel_path = os.path.relpath(file_path, self.base_dir)
                     logger.info(f"[语音管理] 发现语音文件: {file} -> 相对路径: {rel_path}")
                     
                     filename_no_ext = os.path.splitext(file)[0]
                     tags = self._extract_tags(filename_no_ext)
-                    tags.append("theresia")  # 通用标签
+                    tags.append("theresia")
                     
                     quality = self._detect_quality(file_path)
                     
                     self.voices[rel_path] = {
                         "path": rel_path,
                         "filename": file,
-                        "tags": list(set(tags)),  # 去重
+                        "tags": list(set(tags)),
                         "size": os.path.getsize(file_path),
                         "quality": quality
                     }
@@ -104,18 +105,15 @@ class VoiceManager:
 
     def _extract_tags(self, filename: str) -> List[str]:
         tags = []
-        # 英文格式：theresia_greeting_01 → greeting
         if "_" in filename:
             parts = filename.lower().split("_")
             for part in parts[1:]:
                 if part and part not in ("01", "02", "1", "2", "theresia"):
                     tags.append(part)
         
-        # 中文标签提取
         chinese = re.findall(r'[\u4e00-\u9fa5]+', filename)
         tags.extend(chinese)
         
-        # 清理数字后的干净名称
         clean = re.sub(r'\d+', '', filename).strip("_ -.")
         if clean and clean not in tags:
             tags.append(clean)
@@ -140,7 +138,7 @@ class VoiceManager:
 
     def get_voice(self, tag: str = None) -> str:
         if not self.voices:
-            logger.info("[语音管理] 无可用语音（voices 字典为空）")
+            logger.info("[语音管理] 无可用语音")
             return ""
         
         candidates = []
@@ -163,10 +161,8 @@ class VoiceManager:
     def get_voice_count(self, tag: str = None) -> int:
         if tag is None:
             return len(self.voices)
-        count = sum(1 for info in self.voices.values() if tag.lower() in [t.lower() for t in info.get("tags", [])])
-        return count
+        return sum(1 for info in self.voices.values() if tag.lower() in [t.lower() for t in info.get("tags", [])])
 
     async def update_voices(self) -> None:
-        """手动触发重新扫描"""
         logger.info("[语音管理] 手动更新语音资源...")
         await self._scan_voices()
