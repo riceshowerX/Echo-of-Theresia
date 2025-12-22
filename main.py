@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Echo of Theresia - 修复版（完美兼容 WebUI 和所有平台）
+Echo of Theresia - 修复版（兼容所有 AstrBot 版本 + WebUI）
 """
 
 from astrbot.api.star import Context, Star, register
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.event.filter import EventMessageType
 from astrbot.api import logger
-from astrbot.api.message_components import Record, MessageComponent
-from astrbot.api.message.event import WebChatMessageEvent  # 导入 Web 事件类型用于判断
+from astrbot.api.message_components import Record  # 只导入 Record
 
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
@@ -17,9 +16,9 @@ import os
 
 @register(
     "echo_of_theresia",
-    "你的名字或昵称",
+    "特雷西娅",
     "明日方舟特雷西娅角色语音插件",
-    "1.0.1"  # 建议版本号 +1 表示修复
+    "1.0.2"
 )
 class TheresiaVoicePlugin(Star):
     def __init__(self, context: Context, config=None):
@@ -38,34 +37,25 @@ class TheresiaVoicePlugin(Star):
         await self.scheduler.stop()
         logger.info("[Echo of Theresia] 插件已卸载")
 
-    def _get_base_url(self) -> str:
-        """获取 AstrBot 的静态文件服务 URL（用于 WebUI 播放语音）"""
-        # AstrBot 默认静态文件路径为 /static/plugins/<plugin_id>/
-        plugin_id = "echo_of_theresia"
-        return f"/static/plugins/{plugin_id}/voices"
+    def _get_voice_url(self, path: str) -> str:
+        """生成 WebUI 可访问的语音 URL"""
+        filename = os.path.basename(path)
+        return f"/static/plugins/echo_of_theresia/voices/{filename}"
 
     async def safe_yield_voice(self, event: AstrMessageEvent, path: str):
-        """
-        安全发送语音，自动适配不同平台
-        """
+        """安全发送语音，兼容所有平台包括 WebUI"""
         if not os.path.exists(path):
             yield event.plain_result("语音文件不存在哦~")
             return
 
-        # 判断是否支持 chain() 方法（主流平台如 QQ、Telegram 支持）
+        # 如果事件支持 chain 方法（QQ、Telegram、Discord 等）
         if hasattr(event, "chain"):
             yield event.chain([Record(file=path)])
         else:
-            # WebUI 等不支持 chain 的平台：发送可直接播放的 URL
-            filename = os.path.basename(path)
-            voice_url = f"{self._get_base_url()}/{filename}"
-            # WebUI 支持直接播放 URL 的 Record
-            yield event.chain([Record(url=voice_url)]) if hasattr(event, "chain") else None
-            
-            # 更稳妥的方式：发送文字 + URL（兼容性最高）
+            # WebUI 或其他不支持 chain 的平台：发送可播放的 URL
+            voice_url = self._get_voice_url(path)
             yield event.plain_result(f"特雷西娅的语音：\n{voice_url}")
 
-    # 关键词触发
     @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         enabled = self.config.get("enabled", True)
@@ -76,7 +66,6 @@ class TheresiaVoicePlugin(Star):
         text = event.message_str or ""
         prefix = self.config.get("command.prefix", "/theresia")
 
-        # 避免命令也被关键词触发
         if text.startswith(prefix):
             return
 
@@ -87,7 +76,6 @@ class TheresiaVoicePlugin(Star):
                 async for msg in self.safe_yield_voice(event, path):
                     yield msg
 
-    # 主命令
     @filter.command("theresia")
     async def main_cmd(self, event: AstrMessageEvent):
         yield event.plain_result(
