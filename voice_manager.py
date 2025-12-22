@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-语音资源管理模块 - 路径修复最终版
+语音资源管理模块 - 路径彻底修复版
 """
 
 import os
@@ -14,8 +14,9 @@ from astrbot.api import logger
 class VoiceManager:
     def __init__(self, plugin):
         self.plugin = plugin
-        # 修复：正确获取插件根目录 (echo_of_theresia/)
-        self.base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        # 终极修复：正确获取插件根目录 echo_of_theresia/
+        # voice_manager.py 在插件根目录下，所以需要上两层
+        self.base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         self.voice_dir = os.path.join(self.base_dir, "data", "voices")
         self.index_file = os.path.join(self.voice_dir, "index.json")
         
@@ -72,11 +73,9 @@ class VoiceManager:
             logger.info(f"[语音管理] 当前目录文件: {files}")
             
             for file in files:
-                # 支持大小写后缀
                 if file.lower().endswith((".mp3", ".wav", ".ogg", ".m4a")) and file != "index.json":
                     found_files += 1
                     file_path = os.path.join(root, file)
-                    # 相对插件根目录的路径
                     rel_path = os.path.relpath(file_path, self.base_dir)
                     logger.info(f"[语音管理] 发现语音文件: {file} -> 相对路径: {rel_path}")
                     
@@ -138,7 +137,6 @@ class VoiceManager:
 
     def get_voice(self, tag: str = None) -> str:
         if not self.voices:
-            logger.info("[语音管理] 无可用语音")
             return ""
         
         candidates = []
@@ -148,12 +146,9 @@ class VoiceManager:
                 candidates.append(rel_path)
         
         if not candidates:
-            logger.info(f"[语音管理] 无匹配标签 '{tag}' 的语音")
             return ""
         
-        selected = random.choice(candidates)
-        logger.info(f"[语音管理] 选中语音: {selected}")
-        return selected
+        return random.choice(candidates)
 
     def get_tags(self) -> List[str]:
         return sorted(list(self.tags))
