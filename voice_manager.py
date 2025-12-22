@@ -14,23 +14,23 @@ from astrbot.api import logger
 class VoiceManager:
     def __init__(self, plugin):
         self.plugin = plugin
-        # 终极成功方案：使用固定相对路径 "data/voices/"
-        # AstrBot Record 支持相对于插件根目录的相对路径
-        self.voice_dir = "data/voices"  # 直接相对路径
+        # 基于插件根目录的正确路径方案
+        # 获取插件根目录路径
+        plugin_root = os.path.dirname(os.path.abspath(__file__))
+        
+        # 语音目录相对于插件根目录
+        self.voice_dir = os.path.join(plugin_root, "data", "voices")
         self.index_file = os.path.join(self.voice_dir, "index.json")
         
-        # 绝对路径仅用于文件系统操作
-        self.abs_voice_dir = os.path.abspath(self.voice_dir)
-        
-        os.makedirs(self.abs_voice_dir, exist_ok=True)
+        # 确保目录存在
+        os.makedirs(self.voice_dir, exist_ok=True)
         
         self.voices: List[str] = []  # 简化：只存相对路径列表
         self.tags: set[str] = set()
 
     async def load_voices(self) -> None:
         logger.info("[Echo of Theresia] 正在加载语音资源...")
-        logger.info(f"[语音管理] 语音目录 (相对): {self.voice_dir}")
-        logger.info(f"[语音管理] 语音目录 (绝对): {self.abs_voice_dir}")
+        logger.info(f"[语音管理] 语音目录: {self.voice_dir}")
         
         self.voices.clear()
         self.tags.clear()
@@ -52,11 +52,11 @@ class VoiceManager:
         logger.info(f"[Echo of Theresia] 扫描完成，共 {len(self.voices)} 条语音")
 
     async def _scan_voices(self) -> None:
-        if not os.path.exists(self.abs_voice_dir):
-            logger.warning(f"[语音管理] 语音目录不存在: {self.abs_voice_dir}")
+        if not os.path.exists(self.voice_dir):
+            logger.warning(f"[语音管理] 语音目录不存在: {self.voice_dir}")
             return
         
-        content = os.listdir(self.abs_voice_dir)
+        content = os.listdir(self.voice_dir)
         logger.info(f"[语音管理] voices 目录内容: {content}")
 
         found_files = 0
@@ -64,7 +64,8 @@ class VoiceManager:
             file_lower = file.lower()
             if file_lower.endswith((".mp3", ".wav", ".ogg", ".m4a")) and file_lower != "index.json":
                 found_files += 1
-                rel_path = os.path.join(self.voice_dir, file)  # "data/voices/xxx.wav"
+                # 使用相对于插件根目录的路径
+                rel_path = os.path.join("data", "voices", file)
                 logger.info(f"[语音管理] 发现语音: {rel_path}")
                 
                 # 提取标签
