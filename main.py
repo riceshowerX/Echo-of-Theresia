@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Echo of Theresia - 主入口最终版
+Echo of Theresia - 主入口最终版（修复 @register）
 """
 
 from astrbot.api.star import Context, Star, register
@@ -12,10 +12,10 @@ from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
 
 @register(
-    name="echo_of_theresia",
-    author="你的名字",
-    description="明日方舟特雷西娅角色语音插件",
-    version="1.0.0"
+    "echo_of_theresia",
+    "你的名字", 
+    "明日方舟特雷西娅角色语音插件",
+    "1.0.0"
 )
 class TheresiaVoicePlugin(Star):
     def __init__(self, context: Context):
