@@ -43,7 +43,7 @@ class TheresiaVoicePlugin(Star):
             return
 
         keywords = self.config.get("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
-        text = event.get_plain_text() or ""
+        text = event.message_str or ""  # ← 关键修改这里！
         prefix = self.config.get("command.prefix", "/theresia")
 
         if text.startswith(prefix):
