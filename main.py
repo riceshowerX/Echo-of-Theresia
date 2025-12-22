@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Echo of Theresia - 修复版（兼容所有 AstrBot 版本 + WebUI）
+Echo of Theresia - 最终修复版（完美兼容所有平台包括 WebUI）
 """
 
 from astrbot.api.star import Context, Star, register
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.event.filter import EventMessageType
 from astrbot.api import logger
-from astrbot.api.message_components import Record  # 只导入 Record
+from astrbot.api.message_components import Record
 
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
@@ -18,7 +18,7 @@ import os
     "echo_of_theresia",
     "特雷西娅",
     "明日方舟特雷西娅角色语音插件",
-    "1.0.2"
+    "1.0.3"
 )
 class TheresiaVoicePlugin(Star):
     def __init__(self, context: Context, config=None):
@@ -38,24 +38,25 @@ class TheresiaVoicePlugin(Star):
         logger.info("[Echo of Theresia] 插件已卸载")
 
     def _get_voice_url(self, path: str) -> str:
-        """生成 WebUI 可访问的语音 URL"""
+        """生成 WebUI 可直接访问的静态语音 URL"""
         filename = os.path.basename(path)
         return f"/static/plugins/echo_of_theresia/voices/{filename}"
 
     async def safe_yield_voice(self, event: AstrMessageEvent, path: str):
-        """安全发送语音，兼容所有平台包括 WebUI"""
+        """安全发送语音，兼容 QQ/Telegram/WebUI 等所有平台"""
         if not os.path.exists(path):
-            yield event.plain_result("语音文件不存在哦~")
+            yield event.plain_result("语音文件不存在哦~（路径异常）")
             return
 
-        # 如果事件支持 chain 方法（QQ、Telegram、Discord 等）
+        # 支持 chain 的平台（如 QQ、Telegram、Discord）直接发语音文件
         if hasattr(event, "chain"):
             yield event.chain([Record(file=path)])
         else:
-            # WebUI 或其他不支持 chain 的平台：发送可播放的 URL
+            # WebUI 等不支持 chain 的平台：发送可播放的 URL
             voice_url = self._get_voice_url(path)
             yield event.plain_result(f"特雷西娅的语音：\n{voice_url}")
 
+    # 关键词触发
     @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         enabled = self.config.get("enabled", True)
@@ -126,14 +127,14 @@ class TheresiaVoicePlugin(Star):
         lines = ["可用标签:"]
         for t in tags:
             count = self.voice_manager.get_voice_count(t)
-            lines.append(f"• {t}: {count} 条")
+            lines.append(f"• {t or '默认'}: {count} 条")
         yield event.plain_result("\n".join(lines))
 
     @filter.command("theresia update")
     async def update(self, event: AstrMessageEvent):
         yield event.plain_result("正在重新扫描语音资源...")
         await self.voice_manager.update_voices()
-        total = self.voice_manager.get_voice_count()
+        total = self.voice_manager.get_total_count()
         yield event.plain_result(f"更新完成！共 {total} 条语音")
 
     @filter.command("theresia set_target")
@@ -156,7 +157,7 @@ class TheresiaVoicePlugin(Star):
 /theresia voice [标签]   手动发送语音
 /theresia tags          查看所有标签及数量
 /theresia update        重新扫描语音文件
-/theresia set_target    设置当前群为定时目标
+/theresia set_target    设置当前会话为定时目标
 /theresia unset_target  取消定时目标
 /theresia help          显示此详细帮助
 
