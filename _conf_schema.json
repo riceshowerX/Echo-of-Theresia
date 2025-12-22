@@ -1,6 +1,6 @@
 {
   "enabled": {
-    "type": "boolean",
+    "type": "bool",
     "default": true,
     "label": "插件总开关",
     "description": "是否启用整个特雷西娅语音插件"
@@ -12,7 +12,7 @@
     "description": "所有插件指令的前缀"
   },
   "command.keywords": {
-    "type": "array",
+    "type": "list",
     "default": ["特雷西娅", "特蕾西娅", "Theresia"],
     "label": "触发关键词",
     "description": "消息包含这些词时自动发送语音"
@@ -24,7 +24,7 @@
     "description": "关键词触发时优先使用此标签的语音（留空则随机）"
   },
   "schedule.enabled": {
-    "type": "boolean",
+    "type": "bool",
     "default": false,
     "label": "定时发送",
     "description": "是否启用定时自动发送语音"
@@ -36,22 +36,22 @@
     "description": "格式 HH:MM，每天到达此时间触发"
   },
   "schedule.frequency": {
-    "type": "select",
+    "type": "string",
     "default": "daily",
     "options": ["daily", "weekly", "hourly"],
     "label": "发送频率",
     "description": "daily=每天, weekly=每周, hourly=每小时"
   },
   "schedule.voice_tags": {
-    "type": "array",
+    "type": "list",
     "default": [],
     "label": "定时语音标签",
     "description": "留空随机发送，多个标签用逗号分隔"
   },
   "schedule.target_sessions": {
-    "type": "array",
+    "type": "list",
     "default": [],
     "label": "定时发送目标群",
-    "description": "定时语音将发送到这些会话（通过 /theresia set_target 命令设置）"
+    "description": "通过 /theresia set_target 命令设置"
   }
 }
