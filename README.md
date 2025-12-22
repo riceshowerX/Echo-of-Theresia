@@ -1,51 +1,54 @@
-# AstrBot Echo of Theresia 插件
+# Echo of Theresia
 
-## 插件介绍
-这是一个AstrBot插件，实现了明日方舟特雷西娅角色语音的定时发送和对话触发功能，命名为"Echo of Theresia"（特雷西娅的回响）。
+> **开发测试中** - 明日方舟特雷西娅角色语音插件
 
-## 功能特性
+## 📖 插件介绍
 
-### 1. 定时发送功能
-- 支持自定义发送时间
-- 支持多种发送频率（每日、每周、每小时）
-- 支持按标签筛选语音范围
-- 支持随机或顺序发送模式
+Echo of Theresia（特雷西娅的回响）是一个AstrBot插件，为您带来明日方舟特雷西娅角色的语音体验。通过定时发送和对话触发两种方式，让特雷西娅的声音回荡在您的聊天环境中。
 
-### 2. 对话触发功能
-- 指令触发：通过特定命令发送语音
-- 关键词触发：包含指定关键词自动发送
-- 支持按标签发送特定类型语音
+## ✨ 功能特性
 
-### 3. 语音资源管理
-- 支持MP3、WAV、OGG等多种音频格式
-- 自动扫描和索引语音资源
-- 支持语音资源更新
-- 按标签分类管理
+### 🕒 定时发送功能
+- ✅ 支持自定义发送时间
+- ✅ 支持多种发送频率（每日、每周、每小时）
+- ✅ 支持按标签筛选语音范围
+- ✅ 支持随机或顺序发送模式
 
-### 4. 配置管理
-- 支持运行时配置修改
-- 提供友好的配置命令
-- 配置文件自动保存
+### 💬 对话触发功能
+- ✅ 指令触发：通过特定命令发送语音
+- ✅ 关键词触发：包含指定关键词自动发送
+- ✅ 支持按标签发送特定类型语音
 
-## 安装方法
+### 🎵 语音资源管理
+- ✅ 支持MP3、WAV、OGG等多种音频格式
+- ✅ 自动扫描和索引语音资源
+- ✅ 支持语音资源更新
+- ✅ 按标签分类管理
+
+### ⚙️ 配置管理
+- ✅ 支持运行时配置修改
+- ✅ 提供友好的配置命令
+- ✅ 配置文件自动保存
+
+## 🚀 安装方法
 
 ### 1. 手动安装
-将插件目录 `theresia_voice` 复制到 AstrBot 的插件目录中：
+将插件目录 `Echo_of_Theresia` 复制到 AstrBot 的插件目录中：
 
 ```bash
 # 假设AstrBot安装在当前目录
-cp -r theresia_voice ./data/plugins/
+cp -r Echo_of_Theresia ./data/plugins/
 ```
 
 ### 2. 重启AstrBot
 重启AstrBot服务，插件将自动加载。
 
-## 配置方法
+## ⚙️ 配置方法
 
 ### 1. 配置文件
-插件配置文件位于：`data/plugins/theresia_voice/data/config.json`
+插件配置文件位于：`data/plugins/Echo_of_Theresia/data/config.json`
 
-默认配置：
+**默认配置：**
 ```json
 {
     "enabled": true,
@@ -73,7 +76,7 @@ cp -r theresia_voice ./data/plugins/
 /theresia set <配置项> <值>
 ```
 
-例如：
+**示例：**
 ```
 /theresia set schedule.enabled true
 /theresia set schedule.time 09:30
@@ -81,7 +84,7 @@ cp -r theresia_voice ./data/plugins/
 /theresia set schedule.voice_tags greeting,story
 ```
 
-## 使用命令
+## 📋 使用命令
 
 | 命令 | 描述 |
 |------|------|
@@ -95,10 +98,10 @@ cp -r theresia_voice ./data/plugins/
 | `/theresia update` | 更新语音资源 |
 | `/theresia help` | 显示帮助信息 |
 
-## 语音资源管理
+## 🎵 语音资源管理
 
 ### 1. 添加语音文件
-将语音文件复制到 `data/plugins/theresia_voice/data/voices/` 目录中，支持以下格式：
+将语音文件复制到 `data/plugins/Echo_of_Theresia/data/voices/` 目录中，支持以下格式：
 - MP3
 - WAV
 - OGG
@@ -109,7 +112,7 @@ cp -r theresia_voice ./data/plugins/
 theresia_<标签>_<序号>.<格式>
 ```
 
-例如：
+**示例：**
 ```
 theresia_greeting_01.mp3
 theresia_story_02.wav
@@ -121,7 +124,7 @@ theresia_story_02.wav
 /theresia update
 ```
 
-## 触发方式
+## 🎯 触发方式
 
 ### 1. 指令触发
 使用命令直接触发：
@@ -136,37 +139,24 @@ theresia_story_02.wav
 - 特蕾西娅
 - Theresia
 
-## 常见问题
+## 📊 开发状态
 
-### 1. 插件无法加载
-- 检查插件目录是否正确
-- 检查Python版本是否兼容
-- 查看AstrBot日志获取详细错误信息
+- **当前版本**：v1.0.0
+- **开发阶段**：测试中
+- **稳定性**：基本稳定，可能存在少量bug
+- **功能完成度**：90%
 
-### 2. 语音发送失败
-- 检查语音文件格式是否支持
-- 检查语音文件是否损坏
-- 检查AstrBot是否有发送语音的权限
+## ⚠️ 注意事项
 
-### 3. 定时发送不生效
-- 检查定时配置是否正确
-- 检查插件是否已启用
-- 检查系统时间是否准确
+1. 本插件处于开发测试阶段，可能存在不稳定因素
+2. 语音资源需自行准备，建议使用合法获取的资源
+3. 定时发送功能依赖于系统时间的准确性
+4. 关键词触发可能会在某些情况下误触发
 
-## 版本更新
+## 📁 插件结构
 
-### v1.0.0
-- 初始版本
-- 实现定时发送功能
-- 实现对话触发功能
-- 支持语音资源管理
-- 提供配置管理功能
-
-## 开发说明
-
-### 插件结构
 ```
-theresia_voice/
+Echo_of_Theresia/
 ├── __init__.py          # 插件主入口
 ├── config.py            # 配置管理
 ├── voice_manager.py     # 语音资源管理
@@ -178,14 +168,19 @@ theresia_voice/
 └── README.md            # 使用说明文档
 ```
 
-### 开发环境
+## 🛠️ 开发环境
+
 - Python 3.8+
 - AstrBot最新版本
 
-## 许可证
+## 📄 许可证
 
 MIT License
 
-## 联系方式
+## 🤝 贡献
 
-如有问题或建议，欢迎提交Issue或Pull Request。
+欢迎提交Issue或Pull Request来帮助改进插件！
+
+---
+
+> **提示**：由于插件处于开发测试阶段，建议定期查看更新，以获取最新的功能和修复。
