@@ -81,4 +81,11 @@
     "label": "目标会话ID列表",
     "description": "建议使用 /theresia set_target 指令自动添加"
   }
+  ,
+  "features.nudge_response": {
+    "type": "bool",
+    "default": true,
+    "label": "信赖触摸 (戳一戳)",
+    "description": "开启后，戳一戳机器人头像时会触发互动/信赖语音。"
+  }
 }
