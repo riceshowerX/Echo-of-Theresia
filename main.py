@@ -81,7 +81,7 @@ class TheresiaVoicePlugin(Star):
             logger.error(f"[语音发送] 发送失败: {e}")
             yield event.plain_result("发送语音失败了呢…请查看日志")
 
-    # 关键词触发（严格排除所有 /theresia 开头命令）
+    # 关键词触发 - 加强排除
     @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True):
@@ -91,12 +91,14 @@ class TheresiaVoicePlugin(Star):
         if not text:
             return
 
+        # 超级严格排除：所有以 /theresia 开头的消息（无论后面有什么）
         if text.lower().startswith("/theresia"):
             return
 
         lowered = text.lower()
         keywords = [kw.lower() for kw in self.config["command.keywords"]]
         if any(kw in lowered for kw in keywords):
+            # 只发默认标签的随机语音
             tag = self.config["voice.default_tag"]
             rel_path = self.voice_manager.get_voice(tag or None)
             if rel_path:
@@ -107,7 +109,11 @@ class TheresiaVoicePlugin(Star):
 
     @filter.command("theresia")
     async def main_cmd(self, event: AstrMessageEvent, _empty: str = ""):
-        """仅在精确输入 /theresia 时显示简要帮助"""
+        """仅在精确输入 /theresia（无任何额外内容）时显示帮助"""
+        # 额外保险：检查原始消息是否正好是 /theresia（忽略大小写和前后空格）
+        raw_text = (event.message_str or "").strip()
+        if raw_text.lower() != "/theresia":
+            return
         yield event.plain_result(self._get_help_text(brief=True))
 
     @filter.command("theresia enable")
