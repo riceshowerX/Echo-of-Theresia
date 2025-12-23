@@ -7,13 +7,11 @@ import re
 from pathlib import Path
 
 # AstrBot API Imports
-# ================= 核心修改点 1: 导入 AstrNudgeEvent =================
 from astrbot.api.all import *
 from astrbot.api.star import Star, Context, register
-from astrbot.api.event import filter, AstrMessageEvent, AstrNudgeEvent
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.message_components import Record
 from astrbot.api import logger
-# =================================================================
 
 # Local Imports
 from .voice_manager import VoiceManager
@@ -22,8 +20,8 @@ from .scheduler import VoiceScheduler
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "1.3.0",
-    "明日方舟特雷西娅角色语音插件 (Trust Edition)"
+    "1.3.2",
+    "明日方舟特雷西娅角色语音插件 (BugFix Edition)"
 )
 class TheresiaVoicePlugin(Star):
     
@@ -60,7 +58,7 @@ class TheresiaVoicePlugin(Star):
         self.config.setdefault("features.sanity_mode", True)
         self.config.setdefault("features.emotion_detect", True)
         self.config.setdefault("features.smart_negation", True)
-        self.config.setdefault("features.nudge_response", True) # 新增默认值
+        self.config.setdefault("features.nudge_response", True)
 
         # 定时任务配置
         self.config.setdefault("schedule.enabled", False)
@@ -82,7 +80,7 @@ class TheresiaVoicePlugin(Star):
 
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-            logger.info("[Echo of Theresia] 信赖触摸模组已加载")
+            logger.info("[Echo of Theresia] 插件加载完成 (IndexError Fix Applied)")
 
     async def on_unload(self):
         await self.scheduler.stop()
@@ -100,7 +98,8 @@ class TheresiaVoicePlugin(Star):
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str | None):
         if not rel_path:
-            if isinstance(event, AstrMessageEvent) and event.message_str and event.message_str.startswith("/"):
+            # 仅在指令调用时提示
+            if event.message_str and event.message_str.startswith("/"):
                 yield event.plain_result("特雷西娅似乎没有找到这段语音呢~")
             return
 
@@ -150,48 +149,54 @@ class TheresiaVoicePlugin(Star):
 
         return best_tag
 
-    # ==================== Phase 3: 信赖触摸 (Nudge Handler) ====================
+    # ==================== 统一消息触发入口 ====================
     
-    @filter.event_type(AstrNudgeEvent)
-    async def nudge_handler(self, event: AstrNudgeEvent):
-        """处理戳一戳事件"""
-        if not self.config.get("enabled", True): return
-        if not self.config.get("features.nudge_response", True): return
-
-        # 检查是否是戳机器人自己
-        # 注意：不同平台 self_id 获取方式可能不同，通常 target_id 即为被戳的人
-        # 如果 event.target_id 等于机器人的 ID (self_id)，说明是在戳特雷西娅
-        if str(event.target_id) != str(event.self_id):
-            return
-
-        logger.info(f"[Echo of Theresia] 检测到信赖触摸 (User: {event.sender_id})")
-
-        # 随机选择一种反应
-        # 50% 概率是 "poke" (惊喜/吓一跳)
-        # 50% 概率是 "trust" (信赖/注视)
-        # 这对应 VoiceManager 中的映射:
-        # poke -> "戳一下.mp3"
-        # trust -> "信赖触摸.mp3"
-        interaction_type = random.choice(["poke", "trust"])
-        
-        rel_path = self.voice_manager.get_voice(interaction_type)
-        if rel_path:
-            # Nudge 事件通常没有 message_str，但 chain_result 发送方式通用
-            # 我们需要构造一个类似 MessageEvent 的回执，或者直接用 event (AstrBot v3/v4 通用)
-            async for msg in self.safe_yield_voice(event, rel_path):
-                yield msg
-
-    # ==================== 消息触发入口 ====================
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True): return
 
-        text = (event.message_str or "").strip()
-        if not text: return
+        # =========================================================
+        # 1. 优先处理 [戳一戳/Poke]
+        #    这必须放在所有文本处理之前，因为 Poke 事件可能没有文本
+        # =========================================================
+        is_poke = False
+        text = (event.message_str or "").strip() # 预先获取文本，允许为空
 
+        if self.config.get("features.nudge_response", True):
+            # A. 检查对象类型
+            if hasattr(event, 'message_obj') and getattr(event.message_obj, 'type', '') == 'poke':
+                is_poke = True
+            # B. 检查特殊文本标记
+            elif "[戳一戳]" in text or "戳了戳" in text:
+                is_poke = True
+
+        if is_poke:
+            logger.info(f"[Echo of Theresia] 检测到信赖触摸 (Poke)")
+            interaction_type = random.choice(["poke", "trust"])
+            rel_path = self.voice_manager.get_voice(interaction_type)
+            if rel_path:
+                async for msg in self.safe_yield_voice(event, rel_path):
+                    yield msg
+            return # 戳一戳处理完毕，直接退出
+
+        # =========================================================
+        # 2. 空文本拦截
+        #    如果不是戳一戳，且文本为空，直接退出，防止 list index out of range
+        # =========================================================
+        if not text: 
+            return
+
+        # =========================================================
+        # 3. 文本指令/关键词处理
+        #    能走到这里，text 一定是有内容的
+        # =========================================================
+        
+        # 0. 指令过滤
         cmd_prefix = self.config.get("command.prefix", "/theresia").lower()
         if text.lower().startswith(cmd_prefix): return
         
+        # 0.1 如果第一个词是 theresia，留给指令处理器
+        # 此时 text 非空，split()[0] 是安全的
         first_word = text.split()[0].lower()
         if first_word == "theresia": return
 
@@ -287,7 +292,7 @@ class TheresiaVoicePlugin(Star):
 
     def _get_help_text(self, brief: bool = True) -> str:
         if brief:
-            return "Echo of Theresia (v1.3.0) 已就绪~\n发送 /theresia help 查看完整指令。"
+            return "Echo of Theresia (v1.3.2) 已就绪~\n发送 /theresia help 查看完整指令。"
         return (
             "【Echo of Theresia】\n"
             "/theresia enable/disable\n"
@@ -298,5 +303,5 @@ class TheresiaVoicePlugin(Star):
             "特性：\n"
             "1. 情感共鸣：识别累/难过等情绪\n"
             "2. 理智护航：深夜劝睡\n"
-            "3. 信赖触摸：戳一戳头像有互动"
+            "3. 信赖触摸：检测戳一戳事件"
         )
