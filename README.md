@@ -5,7 +5,7 @@
 ### 明日方舟 · 特雷西娅语音插件
 
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-purple?style=flat-square)](https://github.com/Soulter/AstrBot)
-[![Version](https://img.shields.io/badge/Version-1.1.0-pink?style=flat-square)](https://github.com/riceshowerX/Echo-of-Theresia)
+[![Version](https://img.shields.io/badge/Version-1.2.0-pink?style=flat-square)](https://github.com/riceshowerX/Echo-of-Theresia)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Arknights](https://img.shields.io/badge/Arknights-Theresia-black?style=flat-square)](https://ak.hypergryph.com/)
 
@@ -20,20 +20,19 @@
 ## 📖 简介 | Introduction
 
 **Echo of Theresia** 是为 **AstrBot** 量身打造的角色语音插件。
-它不仅仅是一个语音播放器，更试图还原那位温柔的「巴别塔恶灵」。插件内置了 **情感检测** 与 **作息关怀** 系统，能够感知博士的情绪与状态。
+它不仅仅是一个语音播放器，更搭载了 **轻量级 NLP 情感引擎**。现在的特雷西娅能够理解语言的微妙之处——她能听懂“不累”与“好累”的区别，也能在深夜感知你的疲惫。
 
-无论是深夜的劝睡，还是受挫时的安慰，特雷西娅都会用她温柔的声音回应你的期待。
+无论是日常的陪伴，还是准时的早安问候，她都会用最温柔的声音，给予你最恰当的回应。
 
 ## ✨ 功能特性 | Features
 
 | 功能模块 | 详细说明 |
 | :--- | :--- |
-| ❤️ **情感共鸣** | **[新功能]** 能够感知情绪。当你发送“累”、“难过”、“痛苦”时，她会优先回复治愈/鼓励类语音。 |
-| 🌙 **理智护航** | **[新功能]** 深夜 (01:00-05:00) 若检测到博士还在发言，强制触发“劝睡”逻辑，温柔催促休息。 |
+| 🧠 **NLP 情感引擎** | **[v1.2.0 新增]** 包含 **否定检测** (说"不难过"不会误判) 与 **程度感知** (说"超级累"会提高优先级)。 |
+| ❤️ **情感共鸣** | 能够感知情绪。当你表达“累”、“难过”、“痛苦”时，她会打破冷却时间，优先回复治愈语音。 |
+| 🌙 **理智护航** | 深夜 (01:00-05:00) 若检测到博士还在发言，强制触发“劝睡”逻辑，温柔催促休息。 |
 | 🛡️ **智能防冲突** | 独家算法优化，彻底解决「关键词触发」与「指令输入」的冲突问题。 |
-| 💬 **自然交互** | 聊天中自然提到「特雷西娅」即可触发随机语音，无需刻意输入指令。 |
 | 🕒 **精准定时** | 支持 **每日/每周/每小时/仅一次** 四种频率，支持配置热更新（无需重启）。 |
-| ⚙️ **可视化配置** | 提供 `config_schema.json`，支持在 AstrBot Web 管理面板直接修改设置。 |
 | 📦 **开箱即用** | 完美适配 PRTS Wiki 的默认文件名，**无需重命名**即可识别功能标签。 |
 
 ---
@@ -109,11 +108,13 @@ data/plugins/echo_of_theresia/data/voices/
 
 建议在 AstrBot **Web 管理面板** -> **插件配置** 中直接修改。
 
-### 新增功能设置
+### 🧠 智能特性设置 (Smart Features)
 *   **理智护航 (`features.sanity_mode`)**: 
-    *   `true` (默认): 开启深夜劝睡。01:00-05:00 期间触发互动会强制回复 `闲置.mp3`。
+    *   `true`: 开启深夜劝睡。01:00-05:00 期间触发互动会强制回复 `闲置.mp3`。
 *   **情感检测 (`features.emotion_detect`)**:
-    *   `true` (默认): 开启关键词情感分析。检测到负面情绪时优先回复安慰语音。
+    *   `true`: 开启关键词情感分析。检测到负面情绪时优先回复安慰语音。
+*   **智能否定 (`features.smart_negation`)**: **[v1.2.0]**
+    *   `true`: 开启否定检测。例如说“我不累”时，不会误触发休息建议。
 
 ### 基础与定时设置
 *   **指令前缀**: 默认为 `/theresia`。
@@ -126,7 +127,7 @@ data/plugins/echo_of_theresia/data/voices/
 
 ```text
 echo_of_theresia/
-├── main.py              # 核心逻辑 (含情感分析引擎)
+├── main.py              # 核心逻辑 (含 NLP 情感引擎)
 ├── voice_manager.py     # 资源管理 (含文件名映射表)
 ├── scheduler.py         # 异步定时任务
 ├── metadata.yaml        # 元数据
@@ -137,7 +138,7 @@ echo_of_theresia/
 
 ## 🗓️ 未来愿景 | Roadmap
 
-- [x] **Phase 1: 「源石技艺·共鸣」** (已实装情感检测)
+- [x] **Phase 1: 「源石技艺·共鸣」** (已实装 NLP 情感引擎)
 - [x] **Phase 2: 「理智护航」** (已实装深夜模式)
 - [ ] **Phase 3: 「信赖触摸」** (适配 Nudge 事件)
 - [ ] **Phase 4: 「思维链环」** (生成视觉卡片)

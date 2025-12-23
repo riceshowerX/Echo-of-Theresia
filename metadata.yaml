@@ -1,6 +1,6 @@
 name: echo_of_theresia
 display_name: Echo of Theresia - 特雷西娅语音插件
-version: "1.0.5"
+version: "1.2.0"
 author: riceshowerX
 description: 明日方舟特雷西娅角色语音插件，支持关键词触发、随机语音、定时问候功能。
 license: MIT
