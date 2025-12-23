@@ -20,8 +20,8 @@ from .scheduler import VoiceScheduler
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "1.3.3",
-    "明日方舟特雷西娅角色语音插件 (Poke Fix)"
+    "1.3.4",
+    "明日方舟特雷西娅角色语音插件 (Chain Check Fix)"
 )
 class TheresiaVoicePlugin(Star):
     
@@ -80,7 +80,7 @@ class TheresiaVoicePlugin(Star):
 
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-            logger.info("[Echo of Theresia] 插件加载完成 (Poke Fix Applied)")
+            logger.info("[Echo of Theresia] 插件加载完成 (Chain Check Fix)")
 
     async def on_unload(self):
         await self.scheduler.stop()
@@ -155,50 +155,51 @@ class TheresiaVoicePlugin(Star):
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True): return
 
-        # 1. 获取文本并进行预处理
-        # AstrBot 可能会把 Poke 转译成 [Poke:poke] 或 [戳一戳]
-        text = (event.message_str or "").strip()
-        
-        # =========================================================
-        # [核心修复] 增强版 Poke 检测
-        # =========================================================
+        # 1. [核心修改] 遍历消息链检测 Poke
+        # 这是最稳健的方法，不依赖 message_str
         is_poke = False
+        
+        # 检查配置是否开启
         if self.config.get("features.nudge_response", True):
-            text_lower = text.lower()
-            # 1. 检查文本包含 poke (适配 [Poke:poke])
-            if "poke" in text_lower:
-                is_poke = True
-            # 2. 检查中文描述
-            elif "戳一戳" in text or "戳了戳" in text:
-                is_poke = True
-            # 3. 检查对象类型
-            elif hasattr(event, 'message_obj') and getattr(event.message_obj, 'type', '') == 'poke':
-                is_poke = True
+            # 遍历消息组件
+            if hasattr(event, 'message_chain') and event.message_chain:
+                for component in event.message_chain:
+                    # 打印组件信息方便调试
+                    # comp_type = getattr(component, 'type', 'unknown')
+                    # comp_cls = component.__class__.__name__
+                    
+                    # 检测逻辑：
+                    # 1. 类名包含 Poke
+                    # 2. type 属性是 poke
+                    # 3. 字符串表示包含 [Poke:
+                    if "Poke" in component.__class__.__name__ or \
+                       getattr(component, 'type', '').lower() == 'poke' or \
+                       "[Poke:" in str(component):
+                        is_poke = True
+                        break
+            
+            # 备用：检查 message_str (防止某些适配器转译为纯文本)
+            if not is_poke:
+                raw_text = event.message_str or ""
+                if "[戳一戳]" in raw_text or "戳了戳" in raw_text:
+                    is_poke = True
 
         if is_poke:
-            logger.info(f"[Echo of Theresia] 检测到信赖触摸 (Debug: {text})")
-            
-            # 随机触发 惊喜(poke) 或 信赖(trust)
+            logger.info(f"[Echo of Theresia] 检测到信赖触摸 (Source: Chain Detection)")
             interaction_type = random.choice(["poke", "trust"])
             rel_path = self.voice_manager.get_voice(interaction_type)
-            
             if rel_path:
                 async for msg in self.safe_yield_voice(event, rel_path):
                     yield msg
-            else:
-                logger.warning(f"[Echo of Theresia] 戳一戳触发成功，但未找到标签 [{interaction_type}] 的语音文件")
-            return 
+            return # 戳一戳处理完毕，退出
 
         # =========================================================
-        # 空文本拦截 (防止 IndexError)
+        # 2. 常规文本处理
         # =========================================================
-        if not text: 
-            return
+        text = (event.message_str or "").strip()
+        if not text: return # 空文本拦截
 
-        # =========================================================
-        # 文本指令/关键词处理
-        # =========================================================
-        
+        # 指令过滤
         cmd_prefix = self.config.get("command.prefix", "/theresia").lower()
         if text.lower().startswith(cmd_prefix): return
         
@@ -216,7 +217,7 @@ class TheresiaVoicePlugin(Star):
         keywords = [kw.lower() for kw in self.config["command.keywords"]]
         has_called_name = any(kw in text_lower for kw in keywords)
 
-        # 1. 理智护航
+        # 理智护航
         is_late_night = 1 <= hour < 5
         if self.config.get("features.sanity_mode", True) and is_late_night and has_called_name:
             logger.info(f"[Echo of Theresia] 触发理智护航: {text}")
@@ -225,7 +226,7 @@ class TheresiaVoicePlugin(Star):
             should_trigger = True
             bypass_cooldown = True
 
-        # 2. 情感共鸣
+        # 情感共鸣
         elif self.config.get("features.emotion_detect", True):
             detected_tag = self.analyze_sentiment(text)
             if detected_tag and has_called_name: 
@@ -233,7 +234,7 @@ class TheresiaVoicePlugin(Star):
                 should_trigger = True
                 logger.info(f"[Echo of Theresia] 情感共鸣捕获: {target_tag}")
 
-        # 3. 标准触发
+        # 标准触发
         if not should_trigger and has_called_name:
             logger.info(f"[Echo of Theresia] 标准关键词触发")
             target_tag = self.config["voice.default_tag"]
@@ -297,7 +298,7 @@ class TheresiaVoicePlugin(Star):
 
     def _get_help_text(self, brief: bool = True) -> str:
         if brief:
-            return "Echo of Theresia (v1.3.3) 已就绪~\n发送 /theresia help 查看完整指令。"
+            return "Echo of Theresia (v1.3.4) 已就绪~\n发送 /theresia help 查看完整指令。"
         return (
             "【Echo of Theresia】\n"
             "/theresia enable/disable\n"
