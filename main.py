@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import Context, Dict, Any, Optional
+from typing import Dict, Any, Optional
+from astrbot.core.context import Context  # 根据实际框架的 Context 路径调整
 import logging
 
 class EchoOfTheresia:
