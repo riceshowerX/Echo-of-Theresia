@@ -3,55 +3,55 @@
     "type": "bool",
     "default": true,
     "label": "插件总开关",
-    "description": "是否启用整个特雷西娅语音插件，关闭后所有功能失效"
+    "description": "是否启用整个特雷西娅语音插件"
   },
   "command.prefix": {
     "type": "string",
     "default": "/theresia",
     "label": "指令前缀",
-    "description": "所有插件指令的统一前缀，例如配置为'/theresia'时，指令格式为'/theresia 指令名'"
+    "description": "所有插件指令的前缀"
   },
   "command.keywords": {
     "type": "list",
     "default": ["特雷西娅", "特蕾西娅", "Theresia"],
     "label": "触发关键词",
-    "description": "消息内容中包含任意关键词时，自动触发语音发送"
+    "description": "消息包含这些词时自动发送语音"
   },
   "voice.default_tag": {
     "type": "string",
     "default": "",
     "label": "默认标签",
-    "description": "关键词触发时优先选择带有此标签的语音（留空则从所有语音中随机选择）"
+    "description": "关键词触发时优先使用此标签的语音（留空则随机）"
   },
   "schedule.enabled": {
     "type": "bool",
     "default": false,
-    "label": "定时发送功能",
-    "description": "是否启用定时自动发送语音的功能"
+    "label": "定时发送",
+    "description": "是否启用定时自动发送语音"
   },
   "schedule.time": {
     "type": "string",
     "default": "08:00",
-    "label": "定时发送时间",
-    "description": "定时发送的具体时间，格式为HH:MM（24小时制），例如'09:30'表示上午9点30分"
+    "label": "发送时间",
+    "description": "格式 HH:MM，每天到达此时间触发"
   },
   "schedule.frequency": {
     "type": "string",
     "default": "daily",
     "options": ["daily", "weekly", "hourly"],
     "label": "发送频率",
-    "description": "定时发送的频率：daily=每天，weekly=每周（同一时间），hourly=每小时"
+    "description": "daily=每天, weekly=每周, hourly=每小时"
   },
   "schedule.voice_tags": {
     "type": "list",
     "default": [],
     "label": "定时语音标签",
-    "description": "定时发送时优先选择带有这些标签的语音，留空则从所有语音中随机选择"
+    "description": "留空随机发送，多个标签用逗号分隔"
   },
   "schedule.target_sessions": {
     "type": "list",
     "default": [],
-    "label": "定时发送目标会话",
-    "description": "需要定时发送语音的会话ID列表，格式示例：[\"group_123456\", \"private_789012\"]（群聊ID通常以group_为前缀，私聊以private_为前缀），留空则随机发送到所有可用会话"
+    "label": "定时发送目标群",
+    "description": "通过 /theresia set_target 命令设置"
   }
 }
