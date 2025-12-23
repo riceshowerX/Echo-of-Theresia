@@ -20,8 +20,8 @@ from .scheduler import VoiceScheduler
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "1.3.4",
-    "明日方舟特雷西娅角色语音插件 (Chain Check Fix)"
+    "1.3.5",
+    "明日方舟特雷西娅角色语音插件 (Debug Edition)"
 )
 class TheresiaVoicePlugin(Star):
     
@@ -80,7 +80,7 @@ class TheresiaVoicePlugin(Star):
 
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-            logger.info("[Echo of Theresia] 插件加载完成 (Chain Check Fix)")
+            logger.info("[Echo of Theresia] 插件加载完成 (Deep Debug Mode)")
 
     async def on_unload(self):
         await self.scheduler.stop()
@@ -98,7 +98,6 @@ class TheresiaVoicePlugin(Star):
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str | None):
         if not rel_path:
-            # 仅在指令调用时提示
             if event.message_str and event.message_str.startswith("/"):
                 yield event.plain_result("特雷西娅似乎没有找到这段语音呢~")
             return
@@ -155,51 +154,57 @@ class TheresiaVoicePlugin(Star):
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True): return
 
-        # 1. [核心修改] 遍历消息链检测 Poke
-        # 这是最稳健的方法，不依赖 message_str
+        text = (event.message_str or "").strip()
         is_poke = False
-        
-        # 检查配置是否开启
+
+        # =========================================================
+        # 1. 暴力 Poke 检测 (Strategy: Check Everything)
+        # =========================================================
         if self.config.get("features.nudge_response", True):
-            # 遍历消息组件
-            if hasattr(event, 'message_chain') and event.message_chain:
-                for component in event.message_chain:
-                    # 打印组件信息方便调试
-                    # comp_type = getattr(component, 'type', 'unknown')
-                    # comp_cls = component.__class__.__name__
-                    
-                    # 检测逻辑：
-                    # 1. 类名包含 Poke
-                    # 2. type 属性是 poke
-                    # 3. 字符串表示包含 [Poke:
-                    if "Poke" in component.__class__.__name__ or \
-                       getattr(component, 'type', '').lower() == 'poke' or \
-                       "[Poke:" in str(component):
+            # 策略A: 检查整个 Event 对象的字符串表示 (最强力)
+            # 因为日志显示 [Poke:poke]，这很可能在 str(event) 中
+            if "poke" in str(event).lower() or "戳一戳" in str(event):
+                is_poke = True
+            
+            # 策略B: 遍历 Chain (防御性检查)
+            if not is_poke and hasattr(event, 'message_chain'):
+                for comp in event.message_chain:
+                    s = str(comp).lower()
+                    if "poke" in s or "nudge" in s:
                         is_poke = True
                         break
             
-            # 备用：检查 message_str (防止某些适配器转译为纯文本)
-            if not is_poke:
-                raw_text = event.message_str or ""
-                if "[戳一戳]" in raw_text or "戳了戳" in raw_text:
+            # 策略C: 检查 message_obj 属性
+            if not is_poke and hasattr(event, 'message_obj'):
+                if getattr(event.message_obj, 'type', '') == 'poke':
                     is_poke = True
 
         if is_poke:
-            logger.info(f"[Echo of Theresia] 检测到信赖触摸 (Source: Chain Detection)")
+            logger.info(f"[Echo of Theresia] 检测到信赖触摸! (Triggered)")
             interaction_type = random.choice(["poke", "trust"])
             rel_path = self.voice_manager.get_voice(interaction_type)
             if rel_path:
                 async for msg in self.safe_yield_voice(event, rel_path):
                     yield msg
-            return # 戳一戳处理完毕，退出
+            return 
 
         # =========================================================
-        # 2. 常规文本处理
+        # 2. 诊断日志 (如果文本为空且没触发 Poke，打印出来看看是啥)
         # =========================================================
-        text = (event.message_str or "").strip()
-        if not text: return # 空文本拦截
+        if not text:
+            # 这是一个空消息，且没被判定为 Poke，记录一下以便调试
+            # 如果你看到这条日志，请把打印出来的 Chain 告诉我
+            try:
+                chain_debug = str(event.message_chain) if hasattr(event, 'message_chain') else "No Chain"
+                logger.debug(f"[Echo of Theresia] 收到空文本消息，Chain: {chain_debug}")
+            except:
+                pass
+            return
 
-        # 指令过滤
+        # =========================================================
+        # 3. 常规文本逻辑 (以下保持不变)
+        # =========================================================
+        
         cmd_prefix = self.config.get("command.prefix", "/theresia").lower()
         if text.lower().startswith(cmd_prefix): return
         
@@ -298,7 +303,7 @@ class TheresiaVoicePlugin(Star):
 
     def _get_help_text(self, brief: bool = True) -> str:
         if brief:
-            return "Echo of Theresia (v1.3.4) 已就绪~\n发送 /theresia help 查看完整指令。"
+            return "Echo of Theresia (v1.3.5) 已就绪~\n发送 /theresia help 查看完整指令。"
         return (
             "【Echo of Theresia】\n"
             "/theresia enable/disable\n"
