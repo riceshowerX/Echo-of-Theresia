@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Echo of Theresia - 最终完美版（QQ 直接发语音 + 兼容原 voice_manager）
-优化点：使用 pathlib 路径处理、增强错误捕获、统一配置默认值、优化关键词匹配。
+Echo of Theresia - 最终完美版（适配最新 AstrBot）
 """
 
 from astrbot.api.star import Context, Star, register
@@ -13,7 +12,7 @@ from astrbot.api.message_components import Record
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
 
-from pathlib import Path  # 优化：使用 pathlib 代替 os.path，更现代简洁
+from pathlib import Path
 
 @register(
     "echo_of_theresia",
@@ -25,22 +24,30 @@ class TheresiaVoicePlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
         self.config = config or {}
-        # 优化：添加默认配置，确保 get 时不会 None
+        
+        # 设置默认配置
         self.config.setdefault("enabled", True)
         self.config.setdefault("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
         self.config.setdefault("command.prefix", "/theresia")
         self.config.setdefault("voice.default_tag", "")
         
+        # 定时相关默认配置
+        self.config.setdefault("schedule.enabled", False)
+        self.config.setdefault("schedule.time", "08:00")
+        self.config.setdefault("schedule.frequency", "daily")
+        self.config.setdefault("schedule.voice_tags", [])  # 为空则不发送，或填 ["早安", "问候"]
+        self.config.setdefault("schedule.target_sessions", [])
+
         self.voice_manager = VoiceManager(self)
         self.scheduler = VoiceScheduler(self, self.voice_manager)
 
-        # 优化：使用 Path 计算插件根目录
+        # 插件根目录（pathlib）
         self.plugin_root = Path(__file__).parent.resolve()
 
     async def initialize(self) -> None:
         logger.info("[Echo of Theresia] 插件加载中...")
-        await self.voice_manager.load_voices()
-        if self.config["enabled"]:
+        self.voice_manager.load_voices()  # ← 同步调用，无 await
+        if self.config.get("enabled", True):
             await self.scheduler.start()
         logger.info("[Echo of Theresia] 插件加载完成")
 
@@ -49,16 +56,9 @@ class TheresiaVoicePlugin(Star):
         logger.info("[Echo of Theresia] 插件已卸载")
 
     def _rel_to_abs(self, rel_path: str) -> Path:
-        """将相对路径转换为绝对路径（使用 Path）"""
         return (self.plugin_root / rel_path).resolve()
 
-    def _get_voice_url(self, rel_path: str) -> str:
-        """为 WebUI 生成静态资源 URL"""
-        filename = Path(rel_path).name
-        return f"/static/plugins/echo_of_theresia/voices/{filename}"
-
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str):
-        """发送语音：增强错误处理"""
         if not rel_path:
             yield event.plain_result("未找到匹配的语音哦~")
             return
@@ -66,42 +66,42 @@ class TheresiaVoicePlugin(Star):
         abs_path = self._rel_to_abs(rel_path)
 
         if not abs_path.exists():
-            logger.warning(f"[语音发送] 文件不存在: {abs_path} (相对路径: {rel_path})")
+            logger.warning(f"[语音发送] 文件不存在: {abs_path}")
             yield event.plain_result("语音文件不存在哦~（路径异常）")
             return
 
         logger.info(f"[语音发送] 正在发送语音文件: {abs_path}")
 
         try:
-            chain = [Record(file=str(abs_path))]  # 优化：确保 file 是 str
+            chain = [Record(file=str(abs_path))]
             yield event.chain_result(chain)
         except Exception as e:
-            logger.error(f"[语音发送] 错误: {e}")
-            yield event.plain_result("发送语音失败，请检查日志~")
+            logger.error(f"[语音发送] 发送失败: {e}")
+            yield event.plain_result("发送语音失败了呢…请查看日志")
 
-    # 关键词触发
-@filter.event_message_type(EventMessageType.ALL)
-async def keyword_trigger(self, event: AstrMessageEvent):
-    if not self.config["enabled"]:
-        return
+    # 关键词触发（加强防冲突）
+    @filter.event_message_type(EventMessageType.ALL)
+    async def keyword_trigger(self, event: AstrMessageEvent):
+        if not self.config.get("enabled", True):
+            return
 
-    text = (event.message_str or "").strip().lower()
+        text = (event.message_str or "").strip().lower()
+        if not text:
+            return
 
-    if not text:
-        return
+        # 关键修复：所有以 /theresia 开头的命令都不触发关键词语音
+        if text.startswith("/theresia"):
+            return
 
-    # 加强判断：如果消息是任何以 /theresia 开头的命令，都不触发关键词
-    if text.startswith("/theresia"):
-        return
+        keywords = [kw.lower() for kw in self.config["command.keywords"]]
+        if any(kw in text for kw in keywords):
+            tag = self.config["voice.default_tag"]
+            rel_path = self.voice_manager.get_voice(tag or None)
+            if rel_path:
+                async for msg in self.safe_yield_voice(event, rel_path):
+                    yield msg
 
-    keywords = [kw.lower() for kw in self.config["command.keywords"]]
-    if any(kw in text for kw in keywords):
-        tag = self.config["voice.default_tag"]
-        rel_path = self.voice_manager.get_voice(tag or None)
-        if rel_path:
-            async for msg in self.safe_yield_voice(event, rel_path):
-                yield msg
-
+    # 命令部分
     @filter.command("theresia")
     async def main_cmd(self, event: AstrMessageEvent):
         yield event.plain_result(self._get_help_text(brief=True))
@@ -122,12 +122,11 @@ async def keyword_trigger(self, event: AstrMessageEvent):
 
     @filter.command("theresia voice")
     async def voice(self, event: AstrMessageEvent, tag: str = ""):
-        actual_tag = tag.strip() or self.config["voice.default_tag"]  # 优化：tag 为空用默认
+        actual_tag = tag.strip() or self.config["voice.default_tag"]
         rel_path = self.voice_manager.get_voice(actual_tag)
         if not rel_path:
             yield event.plain_result("未找到匹配的语音哦~")
             return
-
         async for msg in self.safe_yield_voice(event, rel_path):
             yield msg
 
@@ -146,7 +145,7 @@ async def keyword_trigger(self, event: AstrMessageEvent):
     @filter.command("theresia update")
     async def update(self, event: AstrMessageEvent):
         yield event.plain_result("正在重新扫描语音资源...")
-        await self.voice_manager.update_voices()
+        self.voice_manager.update_voices()  # ← 同步调用，无 await
         total = self.voice_manager.get_voice_count()
         yield event.plain_result(f"更新完成！共 {total} 条语音")
 
@@ -165,7 +164,6 @@ async def keyword_trigger(self, event: AstrMessageEvent):
         yield event.plain_result(self._get_help_text(brief=False))
 
     def _get_help_text(self, brief: bool = True) -> str:
-        """优化：合并帮助文本，brief 为简要版"""
         if brief:
             return (
                 "Echo of Theresia 已就绪~\n"
