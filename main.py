@@ -1,25 +1,25 @@
 # -*- coding: utf-8 -*-
-"""
-Echo of Theresia - 最终完美版 (Refactored)
-适配 AstrBot (2025)
-"""
-
 import asyncio
 from pathlib import Path
 
-# 引入 AstrBot 核心组件
+# ================= 导入修复区 =================
+# 显式导入所有需要的组件，确保不会报 NameError
 from astrbot.api.all import *
+from astrbot.api.star import StarryPlugin, Context, register
+from astrbot.api.event import filter, AstrMessageEvent, EventMessageType
 from astrbot.api.message_components import Record
+from astrbot.api import logger
+# ============================================
 
-# 引入本地模块 (确保这两个文件在同级目录)
+# 引入同级模块
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
 
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "明日方舟特雷西娅角色语音插件",
-    "1.0.5"
+    "1.0.5",
+    "明日方舟特雷西娅角色语音插件"
 )
 class TheresiaVoicePlugin(StarryPlugin):
     """
@@ -48,16 +48,21 @@ class TheresiaVoicePlugin(StarryPlugin):
         
         # 初始化管理器
         self.voice_manager = VoiceManager(self)
-        self.voice_manager.load_voices() # 同步加载资源
+        self.voice_manager.load_voices() 
         
         # 初始化调度器
         self.scheduler = VoiceScheduler(self, self.voice_manager)
 
         # ================= 启动异步任务 =================
-        # 使用 create_task 确保不阻塞主线程，且无需等待 initialize 回调
+        # 使用 create_task 确保不阻塞主线程
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-            logger.info("[Echo of Theresia] 定时任务服务已启动")
+            logger.info("[Echo of Theresia] 插件加载完成，定时服务已启动")
+
+    async def on_unload(self):
+        """插件卸载时清理资源"""
+        await self.scheduler.stop()
+        logger.info("[Echo of Theresia] 插件已卸载")
 
     # ================= 辅助方法 =================
 
@@ -65,6 +70,14 @@ class TheresiaVoicePlugin(StarryPlugin):
         if not rel_path:
             return None
         return (self.plugin_root / rel_path).resolve()
+
+    def _save_config(self):
+        """尝试保存配置"""
+        try:
+            if hasattr(self.config, "save_config"):
+                self.config.save_config()
+        except Exception:
+            pass
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str | None):
         """安全发送语音的通用方法"""
@@ -88,17 +101,7 @@ class TheresiaVoicePlugin(StarryPlugin):
             logger.error(f"[Echo of Theresia] 发送失败: {e}")
             yield event.plain_result(f"发送语音时出现错误: {e}")
 
-    def _save_config(self):
-        """尝试保存配置"""
-        # 注意：AstrBot 的 config 对象如果是代理对象通常会自动保存
-        # 如果是普通字典，需要框架支持。这里保留兼容性调用。
-        try:
-            if hasattr(self.config, "save_config"):
-                self.config.save_config()
-        except Exception:
-            pass
-
-    # ==================== 统一指令入口 (核心修改) ====================
+    # ==================== 统一指令入口 ====================
     
     @filter.command("theresia")
     async def main_command_handler(self, event: AstrMessageEvent, action: str = None, payload: str = None):
@@ -106,20 +109,18 @@ class TheresiaVoicePlugin(StarryPlugin):
         特雷西娅插件主指令
         用法: /theresia [action] [payload]
         """
-        # 1. 权限与状态检查
-        # 如果需要可以在这里加
-        
-        # 2. 空指令处理 -> 显示帮助
+        # 空指令处理 -> 显示帮助
         if not action:
             yield event.plain_result(self._get_help_text(brief=True))
             return
 
         action = action.lower()
 
-        # 3. 路由分发
+        # 1. 帮助
         if action == "help":
             yield event.plain_result(self._get_help_text(brief=False))
 
+        # 2. 启用插件
         elif action == "enable":
             if self.config["enabled"]:
                 yield event.plain_result("插件已经是启用状态了哦~")
@@ -129,6 +130,7 @@ class TheresiaVoicePlugin(StarryPlugin):
                 asyncio.create_task(self.scheduler.start())
                 yield event.plain_result("特雷西娅语音插件已启用♪")
 
+        # 3. 禁用插件
         elif action == "disable":
             if not self.config["enabled"]:
                 yield event.plain_result("插件已经是禁用状态了。")
@@ -138,6 +140,7 @@ class TheresiaVoicePlugin(StarryPlugin):
                 asyncio.create_task(self.scheduler.stop())
                 yield event.plain_result("特雷西娅语音插件已禁用，期待下次相见。")
 
+        # 4. 手动发送语音
         elif action == "voice":
             # payload 即为 tag
             actual_tag = payload or self.config["voice.default_tag"]
@@ -145,6 +148,7 @@ class TheresiaVoicePlugin(StarryPlugin):
             async for msg in self.safe_yield_voice(event, rel_path):
                 yield msg
 
+        # 5. 查看标签
         elif action == "tags":
             tags = self.voice_manager.get_tags()
             if not tags:
@@ -156,16 +160,19 @@ class TheresiaVoicePlugin(StarryPlugin):
                 lines.append(f"• {t}: {count} 条")
             yield event.plain_result("\n".join(lines))
 
+        # 6. 更新资源
         elif action == "update":
             yield event.plain_result("正在重新扫描思维链环（更新语音库）...")
             self.voice_manager.update_voices()
             total = self.voice_manager.get_voice_count()
             yield event.plain_result(f"更新完成！当前共收录 {total} 条语音。")
 
+        # 7. 设置定时目标
         elif action == "set_target":
             await self.scheduler.add_target(event.session_id)
             yield event.plain_result("已将本会话设为定时问候目标，请期待吧~")
 
+        # 8. 取消定时目标
         elif action == "unset_target":
             await self.scheduler.remove_target(event.session_id)
             yield event.plain_result("已取消本会话的定时问候。")
@@ -173,7 +180,7 @@ class TheresiaVoicePlugin(StarryPlugin):
         else:
             yield event.plain_result(f"未知指令: {action}，请尝试 /theresia help")
 
-    # ==================== 关键词触发 (保留防冲突逻辑) ====================
+    # ==================== 关键词触发 (防冲突逻辑) ====================
     
     @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
