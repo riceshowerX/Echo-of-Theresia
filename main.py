@@ -79,32 +79,34 @@ class TheresiaVoicePlugin(Star):
             logger.error(f"[语音发送] 发送失败: {e}")
             yield event.plain_result("发送语音失败了呢…请查看日志")
 
-    # 关键词触发（加强防冲突）
+    @filter.command("theresia")
+    async def main_cmd(self, event: AstrMessageEvent, *args):
+        # 只有精确输入 /theresia（无额外参数）时才显示帮助
+        if args:
+            return
+        yield event.plain_result(self._get_help_text(brief=True))
+
+    # 关键词触发
     @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True):
             return
 
-        text = (event.message_str or "").strip().lower()
+        text = (event.message_str or "").strip()
         if not text:
             return
 
-        # 关键修复：所有以 /theresia 开头的命令都不触发关键词语音
-        if text.startswith("/theresia"):
+        lowered = text.lower()
+        if lowered.startswith("/theresia"):
             return
 
         keywords = [kw.lower() for kw in self.config["command.keywords"]]
-        if any(kw in text for kw in keywords):
+        if any(kw in lowered for kw in keywords):
             tag = self.config["voice.default_tag"]
             rel_path = self.voice_manager.get_voice(tag or None)
             if rel_path:
                 async for msg in self.safe_yield_voice(event, rel_path):
                     yield msg
-
-    # 命令部分
-    @filter.command("theresia")
-    async def main_cmd(self, event: AstrMessageEvent):
-        yield event.plain_result(self._get_help_text(brief=True))
 
     @filter.command("theresia enable")
     async def enable(self, event: AstrMessageEvent):
