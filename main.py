@@ -20,8 +20,8 @@ from .scheduler import VoiceScheduler
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "1.3.2",
-    "明日方舟特雷西娅角色语音插件 (BugFix Edition)"
+    "1.3.3",
+    "明日方舟特雷西娅角色语音插件 (Poke Fix)"
 )
 class TheresiaVoicePlugin(Star):
     
@@ -80,7 +80,7 @@ class TheresiaVoicePlugin(Star):
 
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-            logger.info("[Echo of Theresia] 插件加载完成 (IndexError Fix Applied)")
+            logger.info("[Echo of Theresia] 插件加载完成 (Poke Fix Applied)")
 
     async def on_unload(self):
         await self.scheduler.stop()
@@ -155,48 +155,53 @@ class TheresiaVoicePlugin(Star):
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True): return
 
+        # 1. 获取文本并进行预处理
+        # AstrBot 可能会把 Poke 转译成 [Poke:poke] 或 [戳一戳]
+        text = (event.message_str or "").strip()
+        
         # =========================================================
-        # 1. 优先处理 [戳一戳/Poke]
-        #    这必须放在所有文本处理之前，因为 Poke 事件可能没有文本
+        # [核心修复] 增强版 Poke 检测
         # =========================================================
         is_poke = False
-        text = (event.message_str or "").strip() # 预先获取文本，允许为空
-
         if self.config.get("features.nudge_response", True):
-            # A. 检查对象类型
-            if hasattr(event, 'message_obj') and getattr(event.message_obj, 'type', '') == 'poke':
+            text_lower = text.lower()
+            # 1. 检查文本包含 poke (适配 [Poke:poke])
+            if "poke" in text_lower:
                 is_poke = True
-            # B. 检查特殊文本标记
-            elif "[戳一戳]" in text or "戳了戳" in text:
+            # 2. 检查中文描述
+            elif "戳一戳" in text or "戳了戳" in text:
+                is_poke = True
+            # 3. 检查对象类型
+            elif hasattr(event, 'message_obj') and getattr(event.message_obj, 'type', '') == 'poke':
                 is_poke = True
 
         if is_poke:
-            logger.info(f"[Echo of Theresia] 检测到信赖触摸 (Poke)")
+            logger.info(f"[Echo of Theresia] 检测到信赖触摸 (Debug: {text})")
+            
+            # 随机触发 惊喜(poke) 或 信赖(trust)
             interaction_type = random.choice(["poke", "trust"])
             rel_path = self.voice_manager.get_voice(interaction_type)
+            
             if rel_path:
                 async for msg in self.safe_yield_voice(event, rel_path):
                     yield msg
-            return # 戳一戳处理完毕，直接退出
+            else:
+                logger.warning(f"[Echo of Theresia] 戳一戳触发成功，但未找到标签 [{interaction_type}] 的语音文件")
+            return 
 
         # =========================================================
-        # 2. 空文本拦截
-        #    如果不是戳一戳，且文本为空，直接退出，防止 list index out of range
+        # 空文本拦截 (防止 IndexError)
         # =========================================================
         if not text: 
             return
 
         # =========================================================
-        # 3. 文本指令/关键词处理
-        #    能走到这里，text 一定是有内容的
+        # 文本指令/关键词处理
         # =========================================================
         
-        # 0. 指令过滤
         cmd_prefix = self.config.get("command.prefix", "/theresia").lower()
         if text.lower().startswith(cmd_prefix): return
         
-        # 0.1 如果第一个词是 theresia，留给指令处理器
-        # 此时 text 非空，split()[0] 是安全的
         first_word = text.split()[0].lower()
         if first_word == "theresia": return
 
@@ -292,7 +297,7 @@ class TheresiaVoicePlugin(Star):
 
     def _get_help_text(self, brief: bool = True) -> str:
         if brief:
-            return "Echo of Theresia (v1.3.2) 已就绪~\n发送 /theresia help 查看完整指令。"
+            return "Echo of Theresia (v1.3.3) 已就绪~\n发送 /theresia help 查看完整指令。"
         return (
             "【Echo of Theresia】\n"
             "/theresia enable/disable\n"
