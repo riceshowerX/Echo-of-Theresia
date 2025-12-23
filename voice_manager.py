@@ -1,150 +1,176 @@
-# -*- coding: utf-8-
+# -*- coding: utf-8 -*-
 """
-语音资源管理模块 - 相对路径终极成功版
+语音资源管理模块 - 终极优化版
+改进点：
+- 使用 pathlib，更安全现代
+- 每个语音文件缓存其专属标签，避免重复提取
+- 索引结构更完整，支持快速查询
+- 标签提取更智能灵活
+- 去除无意义 async
+- 性能显著提升（尤其语音数量 > 100 时）
 """
 
 import os
-import random
-import json
 import re
-from typing import List, Dict
+import json
+import random
+from pathlib import Path
+from typing import List, Dict, Set
 
 from astrbot.api import logger
+
+
+class VoiceEntry:
+    """单个语音条目"""
+    def __init__(self, rel_path: str, tags: Set[str]):
+        self.rel_path = rel_path
+        self.tags = tags  # 小写集合，便于快速匹配
+
 
 class VoiceManager:
     def __init__(self, plugin):
         self.plugin = plugin
-        # 基于插件根目录的正确路径方案
-        # 获取插件根目录路径
-        plugin_root = os.path.dirname(os.path.abspath(__file__))
         
-        # 语音目录相对于插件根目录
-        self.voice_dir = os.path.join(plugin_root, "data", "voices")
-        self.index_file = os.path.join(self.voice_dir, "index.json")
+        # 使用 Path，更优雅且跨平台
+        self.base_dir = Path(__file__).parent.resolve()
+        self.voice_dir = self.base_dir / "data" / "voices"
+        self.index_file = self.voice_dir / "index.json"
         
-        # 确保目录存在
-        os.makedirs(self.voice_dir, exist_ok=True)
-        
-        self.voices: List[str] = []  # 简化：只存相对路径列表
-        self.tags: set[str] = set()
+        # 数据结构
+        self.entries: List[VoiceEntry] = []  # 所有语音条目
+        self.all_tags: Set[str] = set()      # 全局标签集合（用于 /tags 命令）
 
-    async def load_voices(self) -> None:
+    def load_voices(self) -> None:
+        """同步加载（实际为同步IO，移除无意义 async）"""
         logger.info("[Echo of Theresia] 正在加载语音资源...")
         logger.info(f"[语音管理] 语音目录: {self.voice_dir}")
-        
-        self.voices.clear()
-        self.tags.clear()
-        
-        # 尝试加载索引
-        if os.path.exists(self.index_file):
+
+        self.entries.clear()
+        self.all_tags.clear()
+
+        # 优先从索引加载
+        if self.index_file.exists():
             try:
-                with open(self.index_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if data.get("files"):
-                        self.voices = data["files"]
-                        self.tags = set(data.get("tags", []))
-                        logger.info(f"[Echo of Theresia] 从索引加载 {len(self.voices)} 条语音")
-                        return
+                data = json.loads(self.index_file.read_text(encoding="utf-8"))
+                for item in data.get("entries", []):
+                    entry = VoiceEntry(
+                        rel_path=item["path"],
+                        tags=set(item["tags"])
+                    )
+                    self.entries.append(entry)
+                    self.all_tags.update(entry.tags)
+                logger.info(f"[语音管理] 从索引加载 {len(self.entries)} 条语音")
+                if self.entries:
+                    return
             except Exception as e:
-                logger.warning(f"[语音管理] 索引损坏，将重新扫描: {e}")
+                logger.warning(f"[语音管理] 索引加载失败，将重新扫描: {e}")
 
-        await self._scan_voices()
-        logger.info(f"[Echo of Theresia] 扫描完成，共 {len(self.voices)} 条语音")
+        # 索引无效或为空，重新扫描
+        self._scan_voices()
+        logger.info(f"[语音管理] 加载完成，共 {len(self.entries)} 条语音")
 
-    async def _scan_voices(self) -> None:
-        if not os.path.exists(self.voice_dir):
-            logger.warning(f"[语音管理] 语音目录不存在: {self.voice_dir}")
+    def _scan_voices(self) -> None:
+        """扫描语音文件并构建索引"""
+        if not self.voice_dir.exists():
+            self.voice_dir.mkdir(parents=True, exist_ok=True)
+            logger.warning(f"[语音管理] 语音目录不存在，已自动创建: {self.voice_dir}")
             return
-        
-        content = os.listdir(self.voice_dir)
-        logger.info(f"[语音管理] voices 目录内容: {content}")
 
-        found_files = 0
-        for file in content:
-            file_lower = file.lower()
-            if file_lower.endswith((".mp3", ".wav", ".ogg", ".m4a")) and file_lower != "index.json":
-                found_files += 1
-                # 使用相对于插件根目录的路径
-                rel_path = os.path.join("data", "voices", file)
-                logger.info(f"[语音管理] 发现语音: {rel_path}")
-                
-                # 提取标签
-                filename_no_ext = os.path.splitext(file)[0]
-                tags = self._extract_tags(filename_no_ext)
-                tags.append("theresia")
-                self.tags.update(tags)
-                
-                self.voices.append(rel_path)
+        audio_extensions = {".mp3", ".wav", ".ogg", ".m4a", ".silk"}
+        files = [f for f in self.voice_dir.iterdir() 
+                 if f.is_file() and f.suffix.lower() in audio_extensions and f.name != "index.json"]
 
-        logger.info(f"[语音管理] 扫描结束，共发现 {found_files} 个有效语音文件")
+        logger.info(f"[语音管理] 发现 {len(files)} 个音频文件")
 
-        if found_files > 0:
+        for file_path in files:
+            rel_path = str(Path("data") / "voices" / file_path.name)  # 相对于插件根目录
+            filename_no_ext = file_path.stem
+            tags = self._extract_tags(filename_no_ext)
+            tags.add("theresia")  # 默认标签
+
+            entry = VoiceEntry(rel_path=rel_path, tags=tags)
+            self.entries.append(entry)
+            self.all_tags.update(tags)
+
+        if self.entries:
             self._save_index()
 
-    def _extract_tags(self, filename: str) -> List[str]:
-        tags = []
+    def _extract_tags(self, filename: str) -> Set[str]:
+        """智能提取标签（返回小写 set）"""
+        tags = set()
+
+        # 1. 下划线分割（常见：生日_问候_01）
         if "_" in filename:
-            parts = filename.lower().split("_")
-            for part in parts[1:]:
-                if part and part not in ("01", "02", "1", "2", "theresia"):
-                    tags.append(part)
-        
-        chinese = re.findall(r'[\u4e00-\u9fa5]+', filename)
-        tags.extend(chinese)
-        
-        clean = re.sub(r'\d+', '', filename).strip("_ -.")
-        if clean and clean not in tags:
-            tags.append(clean)
-            
-        return [t for t in tags if t]
+            parts = filename.split("_")
+            for part in parts:
+                cleaned = part.strip("0123456789 -.")
+                if cleaned:
+                    tags.add(cleaned.lower())
+
+        # 2. 提取所有中文
+        chinese_words = re.findall(r'[\u4e00-\u9fa5]+', filename)
+        tags.update(chinese_words)
+
+        # 3. 去掉数字、符号后的干净名称作为标签
+        clean_name = re.sub(r'[\d_.\-()]+', ' ', filename).strip()
+        if clean_name:
+            tags.add(clean_name.lower())
+
+        # 4. 移除空字符串
+        return {t for t in tags if t}
 
     def _save_index(self) -> None:
+        """保存完整索引"""
         data = {
-            "files": self.voices,
-            "tags": list(self.tags)
+            "entries": [
+                {
+                    "path": entry.rel_path,
+                    "tags": sorted(list(entry.tags))  # 排序便于阅读
+                }
+                for entry in self.entries
+            ],
+            "total": len(self.entries),
+            "generated_at": __import__('time').strftime("%Y-%m-%d %H:%M:%S")
         }
         try:
-            with open(self.index_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-            logger.info(f"[语音管理] 索引保存成功")
+            self.index_file.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
+            logger.info(f"[语音管理] 索引已保存: {self.index_file}")
         except Exception as e:
             logger.error(f"[语音管理] 保存索引失败: {e}")
 
-    def get_voice(self, tag: str = None) -> str:
-        if not self.voices:
-            return ""
-        
-        candidates = []
-        for rel_path in self.voices:
-            filename = os.path.basename(rel_path)
-            filename_no_ext = os.path.splitext(filename)[0]
-            file_tags = self._extract_tags(filename_no_ext)
-            file_tags.append("theresia")
-            file_tags_lower = [t.lower() for t in file_tags]
-            if tag is None or tag.lower() in file_tags_lower:
-                candidates.append(rel_path)
-        
+    def get_voice(self, tag: str | None = None) -> str | None:
+        """获取随机语音相对路径"""
+        if not self.entries:
+            return None
+
+        if tag is None:
+            # 无标签：随机返回任意一个
+            return random.choice(self.entries).rel_path
+
+        tag_lower = tag.lower()
+        candidates = [e for e in self.entries if tag_lower in e.tags]
+
         if not candidates:
-            return ""
-        
-        return random.choice(candidates)
+            return None
+
+        return random.choice(candidates).rel_path
 
     def get_tags(self) -> List[str]:
-        return sorted(list(self.tags))
+        """返回排序后的标签列表"""
+        return sorted(self.all_tags)
 
-    def get_voice_count(self, tag: str = None) -> int:
+    def get_voice_count(self, tag: str | None = None) -> int:
+        """统计指定标签或总数"""
         if tag is None:
-            return len(self.voices)
-        count = 0
-        for rel_path in self.voices:
-            filename = os.path.basename(rel_path)
-            filename_no_ext = os.path.splitext(filename)[0]
-            file_tags = self._extract_tags(filename_no_ext)
-            file_tags.append("theresia")
-            if tag.lower() in [t.lower() for t in file_tags]:
-                count += 1
-        return count
+            return len(self.entries)
 
-    async def update_voices(self) -> None:
+        tag_lower = tag.lower()
+        return sum(1 for e in self.entries if tag_lower in e.tags)
+
+    def update_voices(self) -> None:
+        """手动触发重新扫描（同步）"""
         logger.info("[语音管理] 手动更新语音资源...")
-        await self._scan_voices()
+        self._scan_voices()
