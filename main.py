@@ -3,9 +3,9 @@ import asyncio
 from pathlib import Path
 
 # ================= 导入修复区 =================
-# 显式导入所有需要的组件，确保不会报 NameError
+# 显式导入 Star 而不是 StarryPlugin，修复报错
 from astrbot.api.all import *
-from astrbot.api.star import StarryPlugin, Context, register
+from astrbot.api.star import Star, Context, register
 from astrbot.api.event import filter, AstrMessageEvent, EventMessageType
 from astrbot.api.message_components import Record
 from astrbot.api import logger
@@ -21,7 +21,7 @@ from .scheduler import VoiceScheduler
     "1.0.5",
     "明日方舟特雷西娅角色语音插件"
 )
-class TheresiaVoicePlugin(StarryPlugin):
+class TheresiaVoicePlugin(Star):  # 继承 Star 以修复报错
     """
     特雷西娅语音插件核心类
     """
