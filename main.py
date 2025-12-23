@@ -7,7 +7,6 @@ import re
 from pathlib import Path
 
 # AstrBot API Imports
-# 1. 移除了 AstrNudgeEvent，保留基础组件
 from astrbot.api.all import *
 from astrbot.api.star import Star, Context, register
 from astrbot.api.event import filter, AstrMessageEvent
@@ -21,8 +20,8 @@ from .scheduler import VoiceScheduler
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "1.3.1",
-    "明日方舟特雷西娅角色语音插件 (Stable Fix)"
+    "1.3.2",
+    "明日方舟特雷西娅角色语音插件 (BugFix Edition)"
 )
 class TheresiaVoicePlugin(Star):
     
@@ -39,7 +38,7 @@ class TheresiaVoicePlugin(Star):
         "失败": ("fail", 6),
         "孤独": ("company", 6),
         "抱抱": ("trust", 5),
-        "戳":   ("poke", 4), # 兼容文本形式的“戳一戳”
+        "戳":   ("poke", 4),
     }
 
     INTENSIFIERS = ["好", "太", "真", "非常", "超级", "死", "特别"]
@@ -81,7 +80,7 @@ class TheresiaVoicePlugin(Star):
 
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-            logger.info("[Echo of Theresia] 插件加载完成 (Crash Fix Applied)")
+            logger.info("[Echo of Theresia] 插件加载完成 (IndexError Fix Applied)")
 
     async def on_unload(self):
         await self.scheduler.stop()
@@ -129,7 +128,6 @@ class TheresiaVoicePlugin(Star):
             current_score = base_score
             kw_index = text_lower.find(keyword)
 
-            # 否定检测
             if self.config.get("features.smart_negation", True):
                 is_negated = False
                 window_start = max(0, kw_index - 3)
@@ -140,7 +138,6 @@ class TheresiaVoicePlugin(Star):
                         break
                 if is_negated: continue 
 
-            # 程度检测
             for intensifier in self.INTENSIFIERS:
                 if intensifier in text_lower:
                     current_score += 5
@@ -153,50 +150,56 @@ class TheresiaVoicePlugin(Star):
         return best_tag
 
     # ==================== 统一消息触发入口 ====================
-    # 注意：在 AstrBot 中，Poke 有时被视为一种特殊的 MessageEvent (type='poke')
-    # 或者直接转化为文本 "[戳一戳]"。我们在主逻辑中一并处理。
     
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True): return
 
-        text = (event.message_str or "").strip()
-        
-        # 0. 指令过滤
-        cmd_prefix = self.config.get("command.prefix", "/theresia").lower()
-        if text.lower().startswith(cmd_prefix): return
-        
-        first_word = text.split()[0].lower()
-        if first_word == "theresia": return
-
-        # ---------------------------------------------------------
-        # 【尝试检测 Nudge/Poke】
-        # ---------------------------------------------------------
-        # 某些适配器会将戳一戳转为文本 "[戳一戳]"，或者 event.message_obj.type 为 'poke'
+        # =========================================================
+        # 1. 优先处理 [戳一戳/Poke]
+        #    这必须放在所有文本处理之前，因为 Poke 事件可能没有文本
+        # =========================================================
         is_poke = False
+        text = (event.message_str or "").strip() # 预先获取文本，允许为空
+
         if self.config.get("features.nudge_response", True):
-            # 方法A: 检查文本
-            if "[戳一戳]" in text or "戳了戳" in text:
+            # A. 检查对象类型
+            if hasattr(event, 'message_obj') and getattr(event.message_obj, 'type', '') == 'poke':
                 is_poke = True
-            # 方法B: 检查消息对象属性 (如果有)
-            elif hasattr(event, 'message_obj') and getattr(event.message_obj, 'type', '') == 'poke':
+            # B. 检查特殊文本标记
+            elif "[戳一戳]" in text or "戳了戳" in text:
                 is_poke = True
 
         if is_poke:
             logger.info(f"[Echo of Theresia] 检测到信赖触摸 (Poke)")
-            # 随机触发 惊喜(poke) 或 信赖(trust)
             interaction_type = random.choice(["poke", "trust"])
             rel_path = self.voice_manager.get_voice(interaction_type)
             if rel_path:
                 async for msg in self.safe_yield_voice(event, rel_path):
                     yield msg
-            return # 戳一戳处理完直接返回
+            return # 戳一戳处理完毕，直接退出
 
-        if not text: return # 非戳一戳且无文本，退出
+        # =========================================================
+        # 2. 空文本拦截
+        #    如果不是戳一戳，且文本为空，直接退出，防止 list index out of range
+        # =========================================================
+        if not text: 
+            return
 
-        # ---------------------------------------------------------
-        # 常规流程
-        # ---------------------------------------------------------
+        # =========================================================
+        # 3. 文本指令/关键词处理
+        #    能走到这里，text 一定是有内容的
+        # =========================================================
+        
+        # 0. 指令过滤
+        cmd_prefix = self.config.get("command.prefix", "/theresia").lower()
+        if text.lower().startswith(cmd_prefix): return
+        
+        # 0.1 如果第一个词是 theresia，留给指令处理器
+        # 此时 text 非空，split()[0] 是安全的
+        first_word = text.split()[0].lower()
+        if first_word == "theresia": return
+
         now = datetime.datetime.now()
         hour = now.hour
         text_lower = text.lower()
@@ -289,7 +292,7 @@ class TheresiaVoicePlugin(Star):
 
     def _get_help_text(self, brief: bool = True) -> str:
         if brief:
-            return "Echo of Theresia (v1.3.1) 已就绪~\n发送 /theresia help 查看完整指令。"
+            return "Echo of Theresia (v1.3.2) 已就绪~\n发送 /theresia help 查看完整指令。"
         return (
             "【Echo of Theresia】\n"
             "/theresia enable/disable\n"
