@@ -205,19 +205,7 @@ class TheresiaVoicePlugin(Star):
             
             logger.warning("="*30 + " DEBUG PROBE END " + "="*30)
 
-        # ---------------------------------------------------------
-        # 【全手段检测逻辑】
-        # ---------------------------------------------------------
-        is_poke = False
-        
-        if self.config.get("features.nudge_response", True):
-            # 1. 检查 Raw Event (OneBot 标准)
-            raw = getattr(event, 'raw_event', None) or getattr(event, 'original_event', None)
-            if isinstance(raw, dict):
-                # 兼容 OneBot v11 notice 事件
-                if raw.get('sub_type') == 'poke' or raw.get('type') == 'poke' or raw.get('notice_type') == 'notify':
-                    is_poke = True
-                    logger.info("[Echo of Theresia] 命中: Raw Event")
+        # ---------------------------------------------------------\n        # 【全手段检测逻辑】\n        # ---------------------------------------------------------\n        is_poke = False\n        \n        if self.config.get("features.nudge_response", True):\n            # 1. 检查 Raw Event (OneBot 标准)\n            raw = getattr(event, 'raw_event', None) or getattr(event, 'original_event', None)\n            if isinstance(raw, dict):\n                # 兼容 OneBot v11 notice 事件\n                if raw.get('sub_type') == 'poke' or raw.get('type') == 'poke' or raw.get('notice_type') == 'notify':\n                    is_poke = True\n                    logger.info("[Echo of Theresia] 命中: Raw Event")\n                \n                # 额外检查 aiocqhttp 的 Poke 事件格式\n                if raw.get('post_type') == 'notice' and raw.get('notice_type') == 'notify' and raw.get('sub_type') == 'poke':\n                    is_poke = True\n                    logger.info("[Echo of Theresia] 命中: aiocqhttp Poke Event")
 
             # 2. 检查 Message Chain (组件扫描)
             if not is_poke and hasattr(event, 'message_chain'):
