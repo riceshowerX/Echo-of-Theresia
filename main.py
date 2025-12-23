@@ -91,14 +91,19 @@ class TheresiaVoicePlugin(Star):
         if not text:
             return
 
-        # 超级严格排除：所有以 /theresia 开头的消息（无论后面有什么）
-        if text.lower().startswith("/theresia"):
+        lowered = text.lower()
+
+        # 超级严格排除：只要消息包含 "theresia" 作为命令词（无论前后），都不触发关键词语音
+        # 覆盖常见情况：/theresia ... 、 theresia ... 、!theresia ... 等
+        if "theresia" in lowered.split()[0] if lowered.split() else False:
             return
 
-        lowered = text.lower()
+        # 额外保险：如果消息以任何常见命令前缀 + theresia 开头，也排除
+        if lowered.startswith(("/theresia", "!theresia", ".theresia", "theresia")):
+            return
+
         keywords = [kw.lower() for kw in self.config["command.keywords"]]
         if any(kw in lowered for kw in keywords):
-            # 只发默认标签的随机语音
             tag = self.config["voice.default_tag"]
             rel_path = self.voice_manager.get_voice(tag or None)
             if rel_path:
