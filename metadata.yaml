@@ -1,10 +1,15 @@
 name: echo_of_theresia
 display_name: Echo of Theresia - 特雷西娅语音插件
-author: 你的名字（或 AstrBot Dev）
-description: 明日方舟特雷西娅角色语音插件，支持关键词触发、手动指令、定时发送
-version: "1.0.0"
+version: "1.0.5"
+author: riceshowerX
+description: 明日方舟特雷西娅角色语音插件，支持关键词触发、随机语音、定时问候功能。
 license: MIT
-categories: ["game", "entertainment", "voice"]
+url: https://github.com/riceshowerX/Echo-of-Theresia
+categories:
+  - game
+  - anime
+  - voice
+  - entertainment
 icon: logo.png
 require_admin: false
 experimental: false

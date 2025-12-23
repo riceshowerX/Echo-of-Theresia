@@ -1,62 +1,65 @@
 # -*- coding: utf-8 -*-
 """
-Echo of Theresia - 最终完美版
-完全适配最新 AstrBot（2025-12）
-已彻底解决命令与关键词冲突问题
+Echo of Theresia - 最终完美版 (Refactored)
+适配 AstrBot (2025)
 """
 
-from astrbot.api.star import Context, Star, register
-from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.event.filter import EventMessageType
-from astrbot.api import logger
+import asyncio
+from pathlib import Path
+
+# 引入 AstrBot 核心组件
+from astrbot.api.all import *
 from astrbot.api.message_components import Record
 
+# 引入本地模块 (确保这两个文件在同级目录)
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
 
-from pathlib import Path
-
-
 @register(
     "echo_of_theresia",
-    "特雷西娅",
+    "riceshowerX",
     "明日方舟特雷西娅角色语音插件",
     "1.0.5"
 )
-class TheresiaVoicePlugin(Star):
-    def __init__(self, context: Context, config=None):
+class TheresiaVoicePlugin(StarryPlugin):
+    """
+    特雷西娅语音插件核心类
+    """
+    
+    def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.config = config or {}
 
-        # 默认配置
+        # ================= 配置初始化 =================
         self.config.setdefault("enabled", True)
         self.config.setdefault("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
         self.config.setdefault("command.prefix", "/theresia")
         self.config.setdefault("voice.default_tag", "")
 
-        # 定时任务默认配置
+        # 定时任务配置
         self.config.setdefault("schedule.enabled", False)
         self.config.setdefault("schedule.time", "08:00")
         self.config.setdefault("schedule.frequency", "daily")
         self.config.setdefault("schedule.voice_tags", [])
         self.config.setdefault("schedule.target_sessions", [])
 
+        # ================= 资源加载 =================
+        self.plugin_root = Path(__file__).parent.resolve()
+        
+        # 初始化管理器
         self.voice_manager = VoiceManager(self)
+        self.voice_manager.load_voices() # 同步加载资源
+        
+        # 初始化调度器
         self.scheduler = VoiceScheduler(self, self.voice_manager)
 
-        # 插件根目录
-        self.plugin_root = Path(__file__).parent.resolve()
-
-    async def initialize(self) -> None:
-        logger.info("[Echo of Theresia] 插件加载中...")
-        self.voice_manager.load_voices()  # 同步加载，无 await
+        # ================= 启动异步任务 =================
+        # 使用 create_task 确保不阻塞主线程，且无需等待 initialize 回调
         if self.config.get("enabled", True):
-            await self.scheduler.start()
-        logger.info("[Echo of Theresia] 插件加载完成")
+            asyncio.create_task(self.scheduler.start())
+            logger.info("[Echo of Theresia] 定时任务服务已启动")
 
-    async def on_unload(self) -> None:
-        await self.scheduler.stop()
-        logger.info("[Echo of Theresia] 插件已卸载")
+    # ================= 辅助方法 =================
 
     def _rel_to_abs(self, rel_path: str | None) -> Path | None:
         if not rel_path:
@@ -64,26 +67,114 @@ class TheresiaVoicePlugin(Star):
         return (self.plugin_root / rel_path).resolve()
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str | None):
+        """安全发送语音的通用方法"""
         if not rel_path:
-            yield event.plain_result("未找到匹配的语音哦~")
+            yield event.plain_result("特雷西娅似乎没有找到这段语音呢~")
             return
 
         abs_path = self._rel_to_abs(rel_path)
         if abs_path is None or not abs_path.exists():
-            logger.warning(f"[语音发送] 文件不存在: {rel_path}")
-            yield event.plain_result("语音文件不存在哦~（路径异常）")
+            logger.warning(f"[Echo of Theresia] 文件缺失: {rel_path}")
+            yield event.plain_result("语音文件走丢了哦~（文件路径异常）")
             return
 
-        logger.info(f"[语音发送] 正在发送语音文件: {abs_path}")
+        logger.info(f"[Echo of Theresia] 发送语音: {abs_path.name}")
 
         try:
+            # 构建语音消息链
             chain = [Record(file=str(abs_path))]
             yield event.chain_result(chain)
         except Exception as e:
-            logger.error(f"[语音发送] 发送失败: {e}")
-            yield event.plain_result("发送语音失败了呢…请查看日志")
+            logger.error(f"[Echo of Theresia] 发送失败: {e}")
+            yield event.plain_result(f"发送语音时出现错误: {e}")
 
-    # ==================== 关键词触发（终极防冲突版） ====================
+    def _save_config(self):
+        """尝试保存配置"""
+        # 注意：AstrBot 的 config 对象如果是代理对象通常会自动保存
+        # 如果是普通字典，需要框架支持。这里保留兼容性调用。
+        try:
+            if hasattr(self.config, "save_config"):
+                self.config.save_config()
+        except Exception:
+            pass
+
+    # ==================== 统一指令入口 (核心修改) ====================
+    
+    @filter.command("theresia")
+    async def main_command_handler(self, event: AstrMessageEvent, action: str = None, payload: str = None):
+        """
+        特雷西娅插件主指令
+        用法: /theresia [action] [payload]
+        """
+        # 1. 权限与状态检查
+        # 如果需要可以在这里加
+        
+        # 2. 空指令处理 -> 显示帮助
+        if not action:
+            yield event.plain_result(self._get_help_text(brief=True))
+            return
+
+        action = action.lower()
+
+        # 3. 路由分发
+        if action == "help":
+            yield event.plain_result(self._get_help_text(brief=False))
+
+        elif action == "enable":
+            if self.config["enabled"]:
+                yield event.plain_result("插件已经是启用状态了哦~")
+            else:
+                self.config["enabled"] = True
+                self._save_config()
+                asyncio.create_task(self.scheduler.start())
+                yield event.plain_result("特雷西娅语音插件已启用♪")
+
+        elif action == "disable":
+            if not self.config["enabled"]:
+                yield event.plain_result("插件已经是禁用状态了。")
+            else:
+                self.config["enabled"] = False
+                self._save_config()
+                asyncio.create_task(self.scheduler.stop())
+                yield event.plain_result("特雷西娅语音插件已禁用，期待下次相见。")
+
+        elif action == "voice":
+            # payload 即为 tag
+            actual_tag = payload or self.config["voice.default_tag"]
+            rel_path = self.voice_manager.get_voice(actual_tag)
+            async for msg in self.safe_yield_voice(event, rel_path):
+                yield msg
+
+        elif action == "tags":
+            tags = self.voice_manager.get_tags()
+            if not tags:
+                yield event.plain_result("暂无标签数据")
+                return
+            lines = ["【可用语音标签】"]
+            for t in tags:
+                count = self.voice_manager.get_voice_count(t)
+                lines.append(f"• {t}: {count} 条")
+            yield event.plain_result("\n".join(lines))
+
+        elif action == "update":
+            yield event.plain_result("正在重新扫描思维链环（更新语音库）...")
+            self.voice_manager.update_voices()
+            total = self.voice_manager.get_voice_count()
+            yield event.plain_result(f"更新完成！当前共收录 {total} 条语音。")
+
+        elif action == "set_target":
+            await self.scheduler.add_target(event.session_id)
+            yield event.plain_result("已将本会话设为定时问候目标，请期待吧~")
+
+        elif action == "unset_target":
+            await self.scheduler.remove_target(event.session_id)
+            yield event.plain_result("已取消本会话的定时问候。")
+
+        else:
+            yield event.plain_result(f"未知指令: {action}，请尝试 /theresia help")
+
+    # ==================== 关键词触发 (保留防冲突逻辑) ====================
+    
     @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True):
@@ -93,94 +184,27 @@ class TheresiaVoicePlugin(Star):
         if not text:
             return
 
-        # 终极排除：只要消息以配置的命令前缀开头（默认 /theresia），直接视为命令，彻底不触发关键词
-        prefix = self.config.get("command.prefix", "/theresia").lower()
-        if text.lower().startswith(prefix):
-            logger.debug(f"[关键词触发] 检测到命令消息，跳过触发: {text}")
+        # 1. 防冲突：如果是指令前缀开头，绝对不触发关键词
+        cmd_prefix = self.config.get("command.prefix", "/theresia").lower()
+        if text.lower().startswith(cmd_prefix):
             return
 
-        # 额外保险：如果第一个词就是 "theresia"（无前缀情况）
+        # 2. 防冲突：如果第一个词是 theresia，也不触发（留给指令处理器）
         first_word = text.split()[0].lower()
         if first_word == "theresia":
-            logger.debug(f"[关键词触发] 第一个词为 theresia，跳过触发: {text}")
             return
 
+        # 3. 关键词匹配
         lowered = text.lower()
         keywords = [kw.lower() for kw in self.config["command.keywords"]]
+        
         if any(kw in lowered for kw in keywords):
-            logger.info(f"[关键词触发] 正常触发关键词: {text}")
+            logger.info(f"[Echo of Theresia] 关键词触发: {text[:10]}...")
             tag = self.config["voice.default_tag"]
             rel_path = self.voice_manager.get_voice(tag or None)
-            if rel_path:
-                async for msg in self.safe_yield_voice(event, rel_path):
-                    yield msg
-
-    # ==================== 命令定义 ====================
-
-    @filter.command("theresia")
-    async def main_cmd(self, event: AstrMessageEvent, _empty: str = ""):
-        """仅在精确输入 /theresia 时显示帮助"""
-        raw_text = (event.message_str or "").strip()
-        if raw_text.lower() != "/theresia":
-            return
-        yield event.plain_result(self._get_help_text(brief=True))
-
-    @filter.command("theresia enable")
-    async def enable(self, event: AstrMessageEvent, _empty: str = ""):
-        self.config["enabled"] = True
-        self.config.save_config()
-        await self.scheduler.start()
-        yield event.plain_result("特雷西娅语音插件已启用♪")
-
-    @filter.command("theresia disable")
-    async def disable(self, event: AstrMessageEvent, _empty: str = ""):
-        self.config["enabled"] = False
-        self.config.save_config()
-        await self.scheduler.stop()
-        yield event.plain_result("特雷西娅语音插件已禁用")
-
-    @filter.command("theresia voice")
-    async def voice(self, event: AstrMessageEvent, tag: str = ""):
-        actual_tag = tag.strip() or self.config["voice.default_tag"]
-        rel_path = self.voice_manager.get_voice(actual_tag)
-        if not rel_path:
-            yield event.plain_result("未找到匹配的语音哦~")
-            return
-        async for msg in self.safe_yield_voice(event, rel_path):
-            yield msg
-
-    @filter.command("theresia tags")
-    async def tags(self, event: AstrMessageEvent, _empty: str = ""):
-        tags = self.voice_manager.get_tags()
-        if not tags:
-            yield event.plain_result("暂无标签（但可能有语音）")
-            return
-        lines = ["可用标签:"]
-        for t in tags:
-            count = self.voice_manager.get_voice_count(t)
-            lines.append(f"• {t}: {count} 条")
-        yield event.plain_result("\n".join(lines))
-
-    @filter.command("theresia update")
-    async def update(self, event: AstrMessageEvent, _empty: str = ""):
-        yield event.plain_result("正在重新扫描语音资源...")
-        self.voice_manager.update_voices()
-        total = self.voice_manager.get_voice_count()
-        yield event.plain_result(f"更新完成！共 {total} 条语音")
-
-    @filter.command("theresia set_target")
-    async def set_target(self, event: AstrMessageEvent, _empty: str = ""):
-        await self.scheduler.add_target(event.session_id)
-        yield event.plain_result("本会话已设为定时发送目标，特雷西娅会准时出现~")
-
-    @filter.command("theresia unset_target")
-    async def unset_target(self, event: AstrMessageEvent, _empty: str = ""):
-        await self.scheduler.remove_target(event.session_id)
-        yield event.plain_result("已取消本会话的定时发送")
-
-    @filter.command("theresia help")
-    async def help_cmd(self, event: AstrMessageEvent, _empty: str = ""):
-        yield event.plain_result(self._get_help_text(brief=False))
+            
+            async for msg in self.safe_yield_voice(event, rel_path):
+                yield msg
 
     # ==================== 帮助文本 ====================
 
@@ -188,29 +212,25 @@ class TheresiaVoicePlugin(Star):
         if brief:
             return (
                 "Echo of Theresia 已就绪~\n"
-                "命令列表：\n"
-                "/theresia enable      启用插件\n"
-                "/theresia disable     禁用插件\n"
-                "/theresia voice [标签] 手动发送语音\n"
-                "/theresia tags        查看标签\n"
-                "/theresia update      重新扫描语音\n"
-                "/theresia set_target  设置定时目标\n"
-                "/theresia unset_target 取消定时目标\n"
-                "/theresia help        显示帮助\n\n"
-                "直接说「特雷西娅」也可触发♪"
+                "常用指令：\n"
+                "/theresia voice [标签]  - 发送语音\n"
+                "/theresia tags         - 查看标签\n"
+                "/theresia help         - 完整菜单\n\n"
+                "提示：直接在对话中提到「特雷西娅」也可以触发哦♪"
             )
         else:
             return """
-【Echo of Theresia 完整命令】
-/theresia               显示简要信息
-/theresia enable        启用插件
-/theresia disable       禁用插件
-/theresia voice [标签]   手动发送语音（如：/theresia voice 问候）
-/theresia tags          查看所有标签及数量
-/theresia update        重新扫描语音文件
-/theresia set_target    设置当前会话为定时目标
-/theresia unset_target  取消定时目标
-/theresia help          显示此帮助
-
-提示：直接发送包含「特雷西娅」的消息也会自动触发随机语音哦♪
+【Echo of Theresia 完整指令列表】
+------------------------------
+/theresia                显示简要信息
+/theresia help           显示此帮助
+/theresia enable         启用插件功能
+/theresia disable        禁用插件功能
+/theresia update         重新扫描语音文件
+/theresia voice [标签]    发送指定标签或随机语音
+/theresia tags           列出所有语音标签及数量
+/theresia set_target     [定时] 将当前会话设为推送目标
+/theresia unset_target   [定时] 取消当前会话的推送
+------------------------------
+直接发送包含「特雷西娅」的消息也会自动触发随机语音♪
             """.strip()
