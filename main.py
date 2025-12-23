@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Echo of Theresia - 最终完美版（QQ 直接发语音 + 兼容原 voice_manager）
+优化点：使用 pathlib 路径处理、增强错误捕获、统一配置默认值、优化关键词匹配。
 """
 
 from astrbot.api.star import Context, Star, register
@@ -12,7 +13,7 @@ from astrbot.api.message_components import Record
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
 
-import os
+from pathlib import Path  # 优化：使用 pathlib 代替 os.path，更现代简洁
 
 @register(
     "echo_of_theresia",
@@ -24,68 +25,77 @@ class TheresiaVoicePlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
         self.config = config or {}
+        # 优化：添加默认配置，确保 get 时不会 None
+        self.config.setdefault("enabled", True)
+        self.config.setdefault("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
+        self.config.setdefault("command.prefix", "/theresia")
+        self.config.setdefault("voice.default_tag", "")
+        
         self.voice_manager = VoiceManager(self)
         self.scheduler = VoiceScheduler(self, self.voice_manager)
 
-        # 计算插件根目录，用于将相对路径转为绝对路径
-        self.plugin_root = os.path.dirname(os.path.abspath(__file__))
+        # 优化：使用 Path 计算插件根目录
+        self.plugin_root = Path(__file__).parent.resolve()
 
     async def initialize(self) -> None:
         logger.info("[Echo of Theresia] 插件加载中...")
         await self.voice_manager.load_voices()
-        await self.scheduler.start()
+        if self.config["enabled"]:
+            await self.scheduler.start()
         logger.info("[Echo of Theresia] 插件加载完成")
 
     async def on_unload(self) -> None:
         await self.scheduler.stop()
         logger.info("[Echo of Theresia] 插件已卸载")
 
-    def _rel_to_abs(self, rel_path: str) -> str:
-        """将 voice_manager 返回的相对路径转换为绝对路径"""
-        return os.path.abspath(os.path.join(self.plugin_root, rel_path))
+    def _rel_to_abs(self, rel_path: str) -> Path:
+        """将相对路径转换为绝对路径（使用 Path）"""
+        return (self.plugin_root / rel_path).resolve()
 
     def _get_voice_url(self, rel_path: str) -> str:
         """为 WebUI 生成静态资源 URL"""
-        filename = os.path.basename(rel_path)
+        filename = Path(rel_path).name
         return f"/static/plugins/echo_of_theresia/voices/{filename}"
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str):
-        """官方推荐方式发送语音：使用 event.chain_result([Record(file=...)])"""
+        """发送语音：增强错误处理"""
         if not rel_path:
             yield event.plain_result("未找到匹配的语音哦~")
             return
 
         abs_path = self._rel_to_abs(rel_path)
 
-        if not os.path.exists(abs_path):
+        if not abs_path.exists():
             logger.warning(f"[语音发送] 文件不存在: {abs_path} (相对路径: {rel_path})")
             yield event.plain_result("语音文件不存在哦~（路径异常）")
             return
 
         logger.info(f"[语音发送] 正在发送语音文件: {abs_path}")
 
-        # 官方标准方式：构建消息链后使用 chain_result 发送
-        # 支持 QQ、Telegram 等所有平台直接发真实语音
-        # WebUI 会自动显示可播放链接
-        chain = [Record(file=abs_path)]
-        yield event.chain_result(chain)
+        try:
+            chain = [Record(file=str(abs_path))]  # 优化：确保 file 是 str
+            yield event.chain_result(chain)
+        except Exception as e:
+            logger.error(f"[语音发送] 错误: {e}")
+            yield event.plain_result("发送语音失败，请检查日志~")
 
     # 关键词触发
     @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
-        enabled = self.config.get("enabled", True)
-        if not enabled:
+        if not self.config["enabled"]:
             return
 
-        keywords = self.config.get("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
-        text = event.message_str or ""
-        prefix = self.config.get("command.prefix", "/theresia")
-
-        if text.startswith(prefix):
+        text = (event.message_str or "").lower()  # 优化：小写匹配，忽略大小写
+        if not text:
             return
 
+        prefix = self.config["command.prefix"]
+        if text.startswith(prefix.lower()):
+            return
+
+        keywords = [kw.lower() for kw in self.config["command.keywords"]]
         if any(kw in text for kw in keywords):
-            tag = self.config.get("voice.default_tag", "")
+            tag = self.config["voice.default_tag"]
             rel_path = self.voice_manager.get_voice(tag or None)
             if rel_path:
                 async for msg in self.safe_yield_voice(event, rel_path):
@@ -93,19 +103,7 @@ class TheresiaVoicePlugin(Star):
 
     @filter.command("theresia")
     async def main_cmd(self, event: AstrMessageEvent):
-        yield event.plain_result(
-            "Echo of Theresia 已就绪~\n"
-            "命令列表：\n"
-            "/theresia enable      启用插件\n"
-            "/theresia disable     禁用插件\n"
-            "/theresia voice [标签] 手动发送语音\n"
-            "/theresia tags        查看标签\n"
-            "/theresia update      重新扫描语音\n"
-            "/theresia set_target  设置定时目标\n"
-            "/theresia unset_target 取消定时目标\n"
-            "/theresia help        显示帮助\n\n"
-            "直接说「特雷西娅」也可触发♪"
-        )
+        yield event.plain_result(self._get_help_text(brief=True))
 
     @filter.command("theresia enable")
     async def enable(self, event: AstrMessageEvent):
@@ -123,7 +121,7 @@ class TheresiaVoicePlugin(Star):
 
     @filter.command("theresia voice")
     async def voice(self, event: AstrMessageEvent, tag: str = ""):
-        actual_tag = tag.strip() if tag else None
+        actual_tag = tag.strip() or self.config["voice.default_tag"]  # 优化：tag 为空用默认
         rel_path = self.voice_manager.get_voice(actual_tag)
         if not rel_path:
             yield event.plain_result("未找到匹配的语音哦~")
@@ -163,7 +161,26 @@ class TheresiaVoicePlugin(Star):
 
     @filter.command("theresia help")
     async def help(self, event: AstrMessageEvent):
-        help_text = """
+        yield event.plain_result(self._get_help_text(brief=False))
+
+    def _get_help_text(self, brief: bool = True) -> str:
+        """优化：合并帮助文本，brief 为简要版"""
+        if brief:
+            return (
+                "Echo of Theresia 已就绪~\n"
+                "命令列表：\n"
+                "/theresia enable      启用插件\n"
+                "/theresia disable     禁用插件\n"
+                "/theresia voice [标签] 手动发送语音\n"
+                "/theresia tags        查看标签\n"
+                "/theresia update      重新扫描语音\n"
+                "/theresia set_target  设置定时目标\n"
+                "/theresia unset_target 取消定时目标\n"
+                "/theresia help        显示帮助\n\n"
+                "直接说「特雷西娅」也可触发♪"
+            )
+        else:
+            return """
 【Echo of Theresia 完整命令】
 /theresia               显示简要信息
 /theresia enable        启用插件
@@ -176,5 +193,4 @@ class TheresiaVoicePlugin(Star):
 /theresia help          显示此帮助
 
 提示：直接发送包含「特雷西娅」的消息也会自动触发随机语音哦♪
-        """.strip()
-        yield event.plain_result(help_text)
+            """.strip()
