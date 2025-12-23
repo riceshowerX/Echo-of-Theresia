@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Echo of Theresia - 最终完美版
-完全适配最新 AstrBot（2025）
+完全适配最新 AstrBot（2025-12）
+已彻底解决命令与关键词冲突问题
 """
 
 from astrbot.api.star import Context, Star, register
@@ -57,7 +58,9 @@ class TheresiaVoicePlugin(Star):
         await self.scheduler.stop()
         logger.info("[Echo of Theresia] 插件已卸载")
 
-    def _rel_to_abs(self, rel_path: str) -> Path:
+    def _rel_to_abs(self, rel_path: str | None) -> Path | None:
+        if not rel_path:
+            return None
         return (self.plugin_root / rel_path).resolve()
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str | None):
@@ -66,9 +69,8 @@ class TheresiaVoicePlugin(Star):
             return
 
         abs_path = self._rel_to_abs(rel_path)
-
-        if not abs_path.exists():
-            logger.warning(f"[语音发送] 文件不存在: {abs_path}")
+        if abs_path is None or not abs_path.exists():
+            logger.warning(f"[语音发送] 文件不存在: {rel_path}")
             yield event.plain_result("语音文件不存在哦~（路径异常）")
             return
 
@@ -81,7 +83,7 @@ class TheresiaVoicePlugin(Star):
             logger.error(f"[语音发送] 发送失败: {e}")
             yield event.plain_result("发送语音失败了呢…请查看日志")
 
-    # 关键词触发 - 加强排除
+    # ==================== 关键词触发（终极防冲突版） ====================
     @filter.event_message_type(EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True):
@@ -91,31 +93,33 @@ class TheresiaVoicePlugin(Star):
         if not text:
             return
 
+        # 终极排除：只要消息以配置的命令前缀开头（默认 /theresia），直接视为命令，彻底不触发关键词
+        prefix = self.config.get("command.prefix", "/theresia").lower()
+        if text.lower().startswith(prefix):
+            logger.debug(f"[关键词触发] 检测到命令消息，跳过触发: {text}")
+            return
+
+        # 额外保险：如果第一个词就是 "theresia"（无前缀情况）
+        first_word = text.split()[0].lower()
+        if first_word == "theresia":
+            logger.debug(f"[关键词触发] 第一个词为 theresia，跳过触发: {text}")
+            return
+
         lowered = text.lower()
-
-        # 超级严格排除：只要消息包含 "theresia" 作为命令词（无论前后），都不触发关键词语音
-        # 覆盖常见情况：/theresia ... 、 theresia ... 、!theresia ... 等
-        if "theresia" in lowered.split()[0] if lowered.split() else False:
-            return
-
-        # 额外保险：如果消息以任何常见命令前缀 + theresia 开头，也排除
-        if lowered.startswith(("/theresia", "!theresia", ".theresia", "theresia")):
-            return
-
         keywords = [kw.lower() for kw in self.config["command.keywords"]]
         if any(kw in lowered for kw in keywords):
+            logger.info(f"[关键词触发] 正常触发关键词: {text}")
             tag = self.config["voice.default_tag"]
             rel_path = self.voice_manager.get_voice(tag or None)
             if rel_path:
                 async for msg in self.safe_yield_voice(event, rel_path):
                     yield msg
 
-    # ==================== 命令定义（适配最新 AstrBot 参数规则） ====================
+    # ==================== 命令定义 ====================
 
     @filter.command("theresia")
     async def main_cmd(self, event: AstrMessageEvent, _empty: str = ""):
-        """仅在精确输入 /theresia（无任何额外内容）时显示帮助"""
-        # 额外保险：检查原始消息是否正好是 /theresia（忽略大小写和前后空格）
+        """仅在精确输入 /theresia 时显示帮助"""
         raw_text = (event.message_str or "").strip()
         if raw_text.lower() != "/theresia":
             return
@@ -137,7 +141,6 @@ class TheresiaVoicePlugin(Star):
 
     @filter.command("theresia voice")
     async def voice(self, event: AstrMessageEvent, tag: str = ""):
-        """支持 /theresia voice [标签]，tag 为空时使用默认标签"""
         actual_tag = tag.strip() or self.config["voice.default_tag"]
         rel_path = self.voice_manager.get_voice(actual_tag)
         if not rel_path:
@@ -161,7 +164,7 @@ class TheresiaVoicePlugin(Star):
     @filter.command("theresia update")
     async def update(self, event: AstrMessageEvent, _empty: str = ""):
         yield event.plain_result("正在重新扫描语音资源...")
-        self.voice_manager.update_voices()  # 同步调用
+        self.voice_manager.update_voices()
         total = self.voice_manager.get_voice_count()
         yield event.plain_result(f"更新完成！共 {total} 条语音")
 
