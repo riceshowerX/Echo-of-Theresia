@@ -39,32 +39,35 @@
 
 ## 🚀 安装方法 | Installation
 
-### 方式一：从 GitHub 克隆（推荐）
+### 前置要求
+请确保服务器/本地环境已安装 **ffmpeg**，否则无法发送语音消息。
 
-进入 AstrBot 的 `data/plugins` 目录，运行：
+### 方式一：通过 GitHub 仓库链接安装（推荐）
 
-```bash
-git clone https://github.com/riceshowerX/Echo-of-Theresia.git echo_of_theresia
-```
+1. 打开 AstrBot 管理面板或控制台。
+2. 找到 **插件管理** -> **安装插件**。
+3. 在「仓库链接」处输入以下地址并安装：
+   ```
+   https://github.com/riceshowerX/Echo-of-Theresia
+   ```
 
-### 方式二：手动安装
+### 方式二：上传 ZIP 文件安装
 
-1. 下载仓库的 [最新 Release ZIP](https://github.com/riceshowerX/Echo-of-Theresia/releases)。
-2. 解压并将文件夹重命名为 `echo_of_theresia`。
-3. 移动到插件目录：`AstrBot/data/plugins/echo_of_theresia`。
-
-> **注意**：安装后请重启 AstrBot 以加载插件元数据。
+1. 访问本仓库首页，点击 **Code** -> **Download ZIP**。
+2. 打开 AstrBot Web 管理面板。
+3. 进入 **插件管理**，点击 **上传插件**，选择下载好的 ZIP 文件。
+4. 安装完成后，请点击 **重载插件** 或重启 AstrBot。
 
 ---
 
 ## 🎵 资源准备 | Resources
 
-本插件需要您自行准备语音文件。
+本插件不自带语音文件，需要您自行准备。
 
 ### 1. 存放位置
-请将 `.mp3`, `.wav`, `.ogg`, `.m4a` 等音频文件放入：
+安装完成后，请将 `.mp3`, `.wav`, `.ogg`, `.m4a` 等音频文件放入以下目录：
 ```text
-plugins/echo_of_theresia/data/voices/
+data/plugins/echo_of_theresia/data/voices/
 ```
 
 ### 2. 命名与标签 (Smart Tagging)
@@ -77,7 +80,7 @@ plugins/echo_of_theresia/data/voices/
 | `Battle_Start_01.mp3` | `battle`, `start` | `/theresia voice battle` |
 | `Theresia_Pure.mp3` | `pure` | `/theresia voice pure` |
 
-> **提示**：文件名越规范，点播越精准。添加文件后记得发送 `/theresia update`。
+> **提示**：文件名越规范，点播越精准。添加文件后请务必发送 `/theresia update` 刷新索引。
 
 ---
 
@@ -141,15 +144,15 @@ echo_of_theresia/
 2.  **Q: 修改了配置需要重启吗？**
     *   A: **不需要**。本插件支持热重载，修改配置或添加文件后，系统会在 30 秒内自动应用变更。
 3.  **Q: 关键词触发了但没声音？**
-    *   A: 请检查 `data/voices` 目录下是否有有效的音频文件，且 AstrBot 宿主程序支持音频发送（如需 ffmpeg 请自行安装）。
+    *   A: 请确保您安装了 **ffmpeg**，且 `data/voices` 目录下有有效的音频文件。
 
 ## 📄 更新日志
 
 #### v1.0.5 (Latest)
-- **重构**: 适配 AstrBot 插件规范，采用 `StarryPlugin` 基类。
+- **重构**: 严格适配 AstrBot 核心 API，使用标准 `Star` 基类。
 - **新增**: 完整的 WebUI 配置支持 (`config_schema.json`)。
 - **优化**: 定时任务支持 `once` 模式与热更新机制。
-- **修复**: 解决了指令参数被误识别为关键词的 Bug。
+- **修复**: 解决了指令参数被误识别为关键词的 Bug，修复了导入兼容性问题。
 
 ## 🤝 贡献与反馈
 
