@@ -1,17 +1,18 @@
 
+
 <div align="center">
 
 # 👑 Echo of Theresia  
-### 明日方舟 · 特雷西娅语音插件（v2.0 重构版）
+### 明日方舟 · 特雷西娅语音插件
 
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-purple?style=flat-square)](https://github.com/Soulter/AstrBot)
-[![Version](https://img.shields.io/badge/Version-2.0.0-pink?style=flat-square)](https://github.com/riceshowerX/Echo-of-Theresia)
+[![Version](https://img.shields.io/badge/Version-2.2.0-pink?style=flat-square)](https://github.com/riceshowerX/Echo-of-Theresia)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Arknights](https://img.shields.io/badge/Arknights-Theresia-black?style=flat-square)](https://ak.hypergryph.com/)
 
 *“博士，夜已经很深了……还在工作吗？我会陪着你，但也希望你能照顾好自己。”*
 
-[功能特性](#-功能特性--features) • [安装指南](#-安装方法--installation) • [交互指南](#-交互指南--interaction-guide) • [配置说明](#-配置说明--configuration)
+[功能特性](#-功能特性--features) • [安装指南](#-安装方法--installation) • [语音列表](#-收录语音--voice-list) • [配置说明](#-配置说明--configuration)
 
 </div>
 
@@ -19,33 +20,22 @@
 
 ## 📖 简介 | Introduction
 
-**Echo of Theresia v2.0** 是为 **AstrBot** 打造的高拟真角色语音插件。  
-插件使用 **官方语音包（来自 PRTS Wiki 下载）**，不生成、不合成、不修改任何语音，仅负责播放与管理。
+**Echo of Theresia** 是为 **AstrBot** 打造的高拟真角色语音插件。
 
-v2.0 是一次 **全面重构**：
-
-- 更智能  
-- 更稳定  
-
-**设计理念：**  
-插件采用 **「唤醒式交互」** —— 特雷西娅不会打断你的 LLM 对话，只有当你呼唤她时，她才会回应你。
+v2.2 版本引入了 **拟人化算法**，旨在通过情感惯性与自适应决策系统，完美适配官方语音包的每一句台词，还原角色“温柔、包容”的性格特质。
 
 ---
 
 ## ✨ 功能特性 | Features
 
-| 功能模块 | 详细说明 |
+| 核心算法 | 详细说明 |
 | :--- | :--- |
-| 🛡️ **唤醒式交互（核心机制）** | 只有消息中包含「特雷西娅」时才会触发语音，避免干扰 LLM 对话。 |
-| 🧠 **NLP 情感引擎（升级版）** | 支持否定检测、程度词强化、关键词权重，识别“累/难过/痛苦”等情绪。 |
-| ❤️ **情感共鸣** | 根据情绪自动选择安慰/治愈语音。 |
-| 🌙 **深夜理智护航（可配置）** | 默认 01:00–05:00，深夜呼唤她时会触发“劝睡”语音。时间段可自定义。 |
-| 🔄 **智能语音选择（v2.0 新增）** | 避免重复播放、按情感强度加权、按会话独立管理。 |
-| 🫂 **戳一戳互动（信赖触摸）** | 支持 QQ/Telegram 的 Nudge 事件，触发互动语音。 |
-| 🕒 **全新定时任务系统（v2.0 重构）** | 支持每日/每周/每小时/仅一次，支持热更新、支持多会话独立状态。 |
-| 📦 **自动标签识别（增强版）** | 支持中文词提取、下划线分割、预设映射、权重系统。 |
-| 🧩 **多会话独立状态（v2.0 新增）** | 每个群/私聊都有独立冷却、独立 last_tag、独立 last_voice_path。 |
-| ⚙️ **配置热更新** | 修改配置后无需重启插件，秒级生效。 |
+| 🧠 **情感惯性引擎 (EI)** | 模拟真实情绪延续性。如果检测到用户情绪低落，会在一定时间内保持“安慰/陪伴”模式，不会突兀地切换语气。 |
+| ⚡ **自适应决策 (ACD)** | 动态调整响应速度。普通闲聊保持 15s 冷却；检测到高危情绪（如“救命/痛苦”）时冷却缩短至 5s，实现“紧急秒回”。 |
+| 🎭 **像素级语义映射** | 针对官方语音包进行了逐句解析。能精准识别“害怕”并回复“*别怕，我在*”（选中干员2）；识别“难过”并回复“*别哭...*”（作战中4）。 |
+| 🌙 **理智护航** | 深夜（默认 01:00-05:00）互动时，优先触发“闲置”语音进行劝睡。 |
+| 🎲 **动态熵减去重** | 播放次数越多的语音权重越低，保证语音随机性；内置短期记忆屏蔽，拒绝复读机。 |
+| ⏰ **拟人化定时任务** | **时间抖动**：定时发送时引入随机延迟，模拟真人操作。<br>**断点补偿**：若因掉线错过时间，重启后自动补发。<br>**多态分发**：多群环境下，每个群收到的语音内容可能不同。 |
 
 ---
 
@@ -64,144 +54,59 @@ https://github.com/riceshowerX/Echo-of-Theresia
 2. 在 AstrBot 面板 → 插件管理 → 上传插件  
 3. 重载插件或重启 AstrBot
 
+> **提示**：安装完成后建议发送指令 `/theresia update` 以刷新语音索引。
+
+---
+
+## 📂 收录语音 | Voice List
+
+插件核心逻辑已针对以下 **官方语音** 进行了深度适配与情感绑定：
+
+| 语音标题 | 情感标签 | 触发场景示例 |
+| :--- | :--- | :--- |
+| **闲置** | sanity | "累了"、"想睡觉"、深夜互动 |
+| **选中干员2** | comfort | "我好怕"、"救命" |
+| **作战中4** | dont_cry | "我好难过"、"想哭"、"破防了" |
+| **部署2** | company | "好孤独"、"没人理我" |
+| **信赖触摸** | trust/love | "喜欢你"、"老婆" |
+| **行动失败** | fail | "搞砸了"、"输了" |
+| **戳一下** | poke | 戳一戳头像 |
+| **问候** | morning | "早上好"、"早安" |
+| **信赖提升后交谈3** | forgive | "我好内疚"、"对不起" |
+| **晋升后交谈2** | hope | "绝望"、"未来" |
+
+*以及：任命助理、交谈1/2/3、晋升后交谈1、观看作战记录、精英化晋升1/2、编入队伍、任命队长、行动出发、行动开始、选中干员1、部署1、作战中1/2/3、完成高难行动、3星/非3星结束行动、进驻设施、标题、新年祝福、生日、周年庆典等全量语音。*
+
 ---
 
 ## 💬 交互指南 | Interaction Guide
 
-### 🟢 正确触发方式（唤醒 + 情绪）
+### 🟢 唤醒式交互
 只有包含触发词（默认：特雷西娅 / Theresia）时才会触发语音。
 
-示例：
+**场景演示：**
 
-**用户：**「特雷西娅，我好累……」  
-→ **触发**：情感检测 → 回复治愈语音
+*   **用户**：「特雷西娅，方案又被毙了，好痛苦...」  
+    *   **判定**：`dont_cry` (高优先级) + `ACD` (紧急)  
+    *   **回应**：“*别哭，很快就结束了。*”
 
-**用户：**「特雷西娅，我有点害怕」  
-→ **触发**：安慰语音
-
-**用户：**「特雷西娅，早上好！」  
-→ **触发**：早安语音
-
----
-
-### 🔕 不会触发的情况（保护 LLM 对话）
-**用户：**「今天真的很累……」  
-→ 不触发（避免打断 AI 对话）
-
-**用户：**「虽然难过，但我会坚持」  
-→ 不触发（避免误判）
-
----
-
-### 🌙 深夜护航示例（可配置）
-**时间：02:30**
-
-**用户：**「特雷西娅，我还在写报告……」  
-→ **触发**：深夜护航语音（劝你休息）
-
----
-
-### 🫂 戳一戳互动
-支持 QQ/Telegram 的 Nudge 事件：
-
-- 戳机器人头像  
-- 发送“戳一戳”文本  
-
-→ 会触发互动语音（poke/trust）
-
----
-
-## 🎵 资源映射 | Resource Mapping
-
-### 语音文件目录
-```
-data/plugins/echo_of_theresia/data/voices/
-```
-
-### 自动识别（无需改名）
-| 文件名 | 自动标签 | 场景 |
-| :--- | :--- | :--- |
-| 闲置.mp3 | sanity | 深夜护航、累、休息 |
-| 选中干员2.mp3 | comfort | 难过、害怕、安慰 |
-| 部署2.mp3 | company | 孤独、陪伴 |
-| 作战中4.mp3 | dont_cry | 痛苦、想哭 |
-| 行动失败.mp3 | fail | 失败、鼓励 |
-| 戳一下.mp3 | poke | 戳一戳事件 |
-| 信赖触摸.mp3 | trust | 抱抱、信赖 |
-| 问候.mp3 | morning | 早安 |
-
-> 添加文件后请执行：  
-> `/theresia update`
-
----
-
-## 🎮 使用命令 | Commands
-
-主指令：`/theresia`
-
-| 命令 | 参数 | 功能 |
-| :--- | :--- | :--- |
-| `/theresia` | - | 显示帮助 |
-| `/theresia voice` | `[标签]` | 播放指定标签语音 |
-| `/theresia tags` | - | 查看所有标签 |
-| `/theresia update` | - | 刷新语音库 |
-| `/theresia set_target` | - | 将当前会话加入定时推送 |
-| `/theresia unset_target` | - | 移除当前会话 |
-| `/theresia enable` | - | 启用插件 |
-| `/theresia disable` | - | 禁用插件 |
+*   **用户**：「特雷西娅，今晚好安静。」  
+    *   **判定**：`lonely`  
+    *   **回应**：“*我在这儿呢，我会一直陪着你。*”
 
 ---
 
 ## ⚙️ 配置说明 | Configuration
 
-建议在 AstrBot Web 面板中修改。
+建议在 AstrBot Web 面板修改 `config.json`。
 
-### 🧠 智能特性
 | 配置项 | 说明 |
 | :--- | :--- |
-| `features.sanity_mode` | 深夜护航 |
-| `sanity.night_start` | 深夜开始时间（小时） |
-| `sanity.night_end` | 深夜结束时间（小时） |
-| `features.emotion_detect` | 情感检测 |
-| `features.smart_negation` | 否定检测 |
-| `features.nudge_response` | 戳一戳互动 |
-
-### 🕒 定时任务
-| 配置项 | 说明 |
-| :--- | :--- |
-| `schedule.enabled` | 是否启用定时任务 |
-| `schedule.time` | 时间（HH:MM） |
-| `schedule.frequency` | daily / weekly / hourly / once |
-| `schedule.weekday` | weekly 模式的周几（1=周一） |
-| `schedule.voice_tags` | 指定语音标签 |
-| `schedule.target_sessions` | 推送目标会话 |
-
----
-
-## 📂 目录结构
-
-```
-echo_of_theresia/
-├── main.py
-├── voice_manager.py
-├── scheduler.py
-├── metadata.yaml
-├── config_schema.json
-└── data/
-    └── voices/
-```
-
----
-
-## 🗓️ Roadmap
-
-- [x] v2.0：多会话独立状态  
-- [x] v2.0：智能语音选择  
-- [x] v2.0：深夜护航可配置  
-- [x] v2.0：全新定时任务系统  
-- [ ] v2.1：多标签轮询  
-- [ ] v2.2：情感增强（LLM 模式）  
-- [ ] v3.0：视觉卡片生成（思维链环）  
+| `features.mood_inertia` | **情感惯性 (EI)** 开关 |
+| `features.sanity_mode` | **理智护航** 开关 |
+| `params.high_emotion_cd` | **紧急冷却**：高情绪下的响应间隔（默认 5s） |
+| `schedule.frequency` | **定时频率**：daily / weekly / hourly / once |
+| `schedule.target_sessions` | **目标会话**：接收定时语音的群号/私聊ID |
 
 ---
 
@@ -222,4 +127,3 @@ echo_of_theresia/
 <div align="center">
 Made with ❤️ for Theresia & Doctor  
 </div>
-

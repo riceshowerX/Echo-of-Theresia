@@ -27,7 +27,6 @@
     "label": "默认语音标签",
     "description": "关键词触发时优先查找的语音标签（留空则完全随机）"
   },
-
   "features.sanity_mode": {
     "type": "bool",
     "default": true,
@@ -46,7 +45,6 @@
     "label": "深夜结束时间 (小时)",
     "description": "理智护航的结束小时（0-23，不含此小时），例如 5 表示到 05:00 结束。"
   },
-
   "features.emotion_detect": {
     "type": "bool",
     "default": true,
@@ -59,13 +57,42 @@
     "label": "智能否定检测",
     "description": "开启后，说「不累」「没难过」等否定句将不会误触发安慰语音。"
   },
+  "features.mood_inertia": {
+    "type": "bool",
+    "default": true,
+    "label": "情感惯性 (EI)",
+    "description": "开启后，特雷西娅会记住你的强烈情绪（如悲伤），并在短时间内保持安慰语气。"
+  },
+  "features.smart_voice_pick": {
+    "type": "bool",
+    "default": true,
+    "label": "智能选词 & 防重复",
+    "description": "开启后，会根据使用频率动态降低重复语音的权重，防止复读机。"
+  },
   "features.nudge_response": {
     "type": "bool",
     "default": true,
     "label": "信赖触摸 (戳一戳)",
     "description": "开启后，戳一戳机器人头像时会触发互动/信赖语音。"
   },
-
+  "params.base_cooldown": {
+    "type": "int",
+    "default": 15,
+    "label": "基础冷却时间 (秒)",
+    "description": "普通对话后的冷却时间，防止刷屏。"
+  },
+  "params.high_emotion_cd": {
+    "type": "int",
+    "default": 5,
+    "label": "紧急回应冷却 (秒)",
+    "description": "当检测到高优先级情绪（如救命、痛苦）时，冷却时间缩短为此值，以便及时回应。"
+  },
+  "params.mood_duration": {
+    "type": "int",
+    "default": 60,
+    "label": "情绪记忆时长 (秒)",
+    "description": "情感惯性的持续时间。"
+  },
   "schedule.enabled": {
     "type": "bool",
     "default": false,
@@ -76,7 +103,7 @@
     "type": "string",
     "default": "08:00",
     "label": "触发时间",
-    "description": "触发时间，格式为 HH:MM (24小时制)。在 daily/weekly 模式下表示一天中的时间；在 hourly 模式下只使用分钟部分。"
+    "description": "触发时间，格式为 HH:MM (24小时制)。"
   },
   "schedule.frequency": {
     "type": "string",
@@ -100,7 +127,7 @@
     "type": "list",
     "default": [],
     "label": "定时语音标签",
-    "description": "定时任务发送的语音类型（例如：morning、sanity等标签）。留空则随机发送。"
+    "description": "定时任务发送的语音类型（例如：morning、sanity）。留空则根据时间段自动注入上下文。"
   },
   "schedule.target_sessions": {
     "type": "list",
