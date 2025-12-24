@@ -204,17 +204,18 @@ class TheresiaVoicePlugin(Star):
 
         return random.choice(candidates)
 
-    # ==================== 戳一戳 ====================
+    # ==================== 戳一戳事件（OneBot Notice） ====================
 
-    def is_poke_event(self, event, text):
+    @filter.event_notice_type("poke")
+    async def on_poke(self, event: AstrMessageEvent):
+        """处理 OneBot 的戳一戳事件"""
         if not self.config.get("features.nudge_response", True):
-            return False
+            return
 
-        msg_type = getattr(getattr(event, "message_obj", None), "type", None)
-        if msg_type == "poke":
-            return True
+        logger.info(f"[Echo v2.0] 捕获到戳一戳事件 session={event.session_id}")
 
-        return "[戳一戳]" in text or "戳了戳" in text
+        async for msg in self.handle_poke(event):
+            yield msg
 
     async def handle_poke(self, event):
         tag = random.choice(["poke", "trust"])
@@ -232,12 +233,6 @@ class TheresiaVoicePlugin(Star):
 
         text = (event.message_str or "").strip()
         text_lower = text.lower()
-
-        # 戳一戳
-        if self.is_poke_event(event, text):
-            async for msg in self.handle_poke(event):
-                yield msg
-            return
 
         if not text:
             return
@@ -296,7 +291,7 @@ class TheresiaVoicePlugin(Star):
     # ==================== 按标签发送语音 ====================
 
     async def send_voice_by_tag(self, event: AstrMessageEvent, tag: str | None):
-        """根据标签选择语音并发送，同时记录上一次选择，用于后续智能选择。"""
+        """根据标签选择语音并发送"""
         rel_path = self.voice_manager.get_voice(tag or None)
         if not rel_path and tag:
             rel_path = self.voice_manager.get_voice(None)
