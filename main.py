@@ -6,14 +6,12 @@ import random
 import re
 from pathlib import Path
 
-# AstrBot API Imports
 from astrbot.api.all import *
 from astrbot.api.star import Star, Context, register
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.message_components import Record
 from astrbot.api import logger
 
-# Local Imports
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
 
@@ -21,21 +19,13 @@ from .scheduler import VoiceScheduler
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "1.4.0",
-    "明日方舟特雷西娅角色语音插件 (Refactor + Smart Edition)"
+    "2.0.0",
+    "明日方舟特雷西娅角色语音插件（v2.0 重构版）"
 )
 class TheresiaVoicePlugin(Star):
-    """
-    Echo of Theresia 主插件
-    - 支持情感识别、理智护航、戳一戳触发
-    - 重构结构，更易维护
-    - 修复潜在 bug
-    - 增强语音选择逻辑
-    """
 
-    # ==================== 情感与文本分析配置 ====================
+    # ==================== 情感定义 ====================
 
-    # 情感定义：(标签, 基础权重)
     EMOTION_DEFINITIONS = {
         "晚安": ("sanity", 10),
         "早安": ("morning", 9),
@@ -51,357 +41,269 @@ class TheresiaVoicePlugin(Star):
         "戳":   ("poke", 4),
     }
 
-    # 程度副词，提升情感权重
     INTENSIFIERS = ["好", "太", "真", "非常", "超级", "死", "特别"]
-
-    # 否定词，命中则跳过该情感
     NEGATIONS = ["不", "没", "别", "勿", "无"]
-
-    # 否定词检测窗口长度（字符）
     NEGATION_WINDOW = 5
+
+    # ==================== 初始化 ====================
 
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.config = config or {}
 
-        # ==================== 基础配置 ====================
         self._init_default_config()
 
-        # ==================== 运行时状态 ====================
-        self.last_trigger_time = 0
-        self.cooldown_seconds = 10
-
-        # 用于更“智能”的语音选择（避免过于重复）
-        self.last_tag: str | None = None
-        self.last_voice_path: str | None = None
+        # 多会话独立状态
+        self.session_state = {}  # { session_id: { last_tag, last_voice_path, last_trigger_time } }
 
         self.plugin_root = Path(__file__).parent.resolve()
 
-        # ==================== 管理器初始化 ====================
+        # 管理器
         self.voice_manager = VoiceManager(self)
         self.voice_manager.load_voices()
 
         self.scheduler = VoiceScheduler(self, self.voice_manager)
 
+    async def on_load(self):
+        """生命周期：插件加载完成后启动 scheduler"""
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-            logger.info("[Echo of Theresia] 插件加载完成 (Refactor + Smart Edition)")
+        logger.info("[Echo of Theresia v2.0] 插件加载完成")
 
-    # ==================== 配置与工具方法 ====================
+    async def on_unload(self):
+        await self.scheduler.stop()
+
+    # ==================== 配置 ====================
 
     def _init_default_config(self):
-        """统一配置初始化，集中管理所有默认值，便于维护。"""
-        # 开关相关
         self.config.setdefault("enabled", True)
 
-        # 文本触发相关
         self.config.setdefault("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
         self.config.setdefault("command.prefix", "/theresia")
         self.config.setdefault("voice.default_tag", "")
 
-        # 智能特性开关
-        self.config.setdefault("features.sanity_mode", True)       # 深夜理智护航
-        self.config.setdefault("features.emotion_detect", True)    # 文本情感识别
-        self.config.setdefault("features.smart_negation", True)    # 否定词识别
-        self.config.setdefault("features.nudge_response", True)    # 戳一戳触发
-        self.config.setdefault("features.smart_voice_pick", True)  # 智能语音选择
+        self.config.setdefault("features.sanity_mode", True)
+        self.config.setdefault("features.emotion_detect", True)
+        self.config.setdefault("features.smart_negation", True)
+        self.config.setdefault("features.nudge_response", True)
+        self.config.setdefault("features.smart_voice_pick", True)
 
-        # 定时任务配置
+        # 深夜护航时间段
+        self.config.setdefault("sanity.night_start", 1)
+        self.config.setdefault("sanity.night_end", 5)
+
+        # 定时任务
         self.config.setdefault("schedule.enabled", False)
         self.config.setdefault("schedule.time", "08:00")
         self.config.setdefault("schedule.frequency", "daily")
         self.config.setdefault("schedule.voice_tags", [])
         self.config.setdefault("schedule.target_sessions", [])
 
-    async def on_unload(self):
-        await self.scheduler.stop()
-
-    def _rel_to_abs(self, rel_path: str | None) -> Path | None:
-        if not rel_path:
-            return None
-        return (self.plugin_root / rel_path).resolve()
-
     def _save_config(self):
-        """兼容 AstrBot Config 对象与普通 dict."""
         try:
             if hasattr(self.config, "save_config"):
                 self.config.save_config()
         except Exception:
-            # 这里吞掉异常是刻意为之，避免影响正常使用
             pass
+
+    # ==================== 会话状态 ====================
+
+    def _get_session_state(self, session_id):
+        if session_id not in self.session_state:
+            self.session_state[session_id] = {
+                "last_tag": None,
+                "last_voice_path": None,
+                "last_trigger_time": 0,
+            }
+        return self.session_state[session_id]
 
     # ==================== 安全发送语音 ====================
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str | None):
-        """
-        安全发送语音：
-        - 检查路径是否存在
-        - 捕获发送异常
-        - 仅在指令调用失败时提示
-        """
         if not rel_path:
-            # 仅在指令调用时提示
             if event.message_str and event.message_str.startswith("/"):
                 yield event.plain_result("特雷西娅似乎没有找到这段语音呢~")
             return
 
-        abs_path = self._rel_to_abs(rel_path)
-        if not abs_path or not abs_path.exists():
-            logger.warning(f"[Echo of Theresia] 文件缺失: {rel_path}")
+        abs_path = (self.plugin_root / rel_path).resolve()
+        if not abs_path.exists():
+            logger.warning(f"[Echo v2.0] 文件缺失: {rel_path}")
             return
 
-        logger.info(f"[Echo of Theresia] 发送语音: {abs_path.name}")
         try:
-            chain = [Record(file=str(abs_path))]
-            yield event.chain_result(chain)
+            yield event.chain_result([Record(file=str(abs_path))])
         except Exception as e:
-            # 建议打印 traceback 便于排查
             import traceback
-            logger.error(f"[Echo of Theresia] 发送失败: {e}")
+            logger.error(f"[Echo v2.0] 发送失败: {e} | session={event.session_id} | path={rel_path}")
             logger.error(traceback.format_exc())
 
-    # ==================== 文本情感分析引擎 ====================
+    # ==================== 情感分析 ====================
 
-    def analyze_sentiment(self, text: str) -> tuple[str | None, int]:
-        """
-        返回 (最佳情感标签, 情感强度分数)
-        - 使用更安全的匹配方式
-        - 支持否定词窗口
-        """
+    def analyze_sentiment(self, text: str):
         text_lower = text.lower()
         best_tag = None
         max_score = 0
 
         for keyword, (tag, base_score) in self.EMOTION_DEFINITIONS.items():
-            # 使用正则匹配，避免子串误伤（如 “早安娜”）
-            if keyword not in text_lower:
+            keyword_lower = keyword.lower()
+            if keyword_lower not in text_lower:
                 continue
 
-            for match in re.finditer(re.escape(keyword), text_lower):
+            for match in re.finditer(re.escape(keyword_lower), text_lower):
                 kw_index = match.start()
-                current_score = base_score
+                score = base_score
 
-                # 否定词检测
                 if self.config.get("features.smart_negation", True):
-                    window_start = max(0, kw_index - self.NEGATION_WINDOW)
-                    prefix_window = text_lower[window_start:kw_index]
-                    if any(neg in prefix_window for neg in self.NEGATIONS):
-                        # 被否定的情感直接略过
+                    window = text_lower[max(0, kw_index - self.NEGATION_WINDOW):kw_index]
+                    if any(neg in window for neg in self.NEGATIONS):
                         continue
 
-                # 程度副词加权：只要文本中包含任一强化词，就加分
-                if any(intensifier in text_lower for intensifier in self.INTENSIFIERS):
-                    current_score += 5
+                if any(i in text_lower for i in self.INTENSIFIERS):
+                    score += 5
 
-                if current_score > max_score:
-                    max_score = current_score
+                if score > max_score:
+                    max_score = score
                     best_tag = tag
 
         return best_tag, max_score
 
-    # ==================== 智能语音选择逻辑 ====================
+    # ==================== 智能语音选择 ====================
 
-    def pick_voice_tag(
-        self,
-        *,
-        base_tag: str | None,
-        sentiment_tag: str | None,
-        sentiment_score: int,
-        is_late_night: bool
-    ) -> str | None:
-        """
-        综合多因素选择最终语音标签：
-        - 深夜优先理智/安慰
-        - 有情感标签时优先情感
-        - 根据强度调整标签
-        - 避免连续重复同一标签（在 smart_voice_pick 开启时）
-        """
-        tag_candidates: list[str] = []
+    def pick_voice_tag(self, *, base_tag, sentiment_tag, sentiment_score, is_late_night, session_state):
+        candidates = []
 
-        # 1. 深夜优先策略：如果是深夜 + 有负面情绪，优先 comfort / sanity
+        # 深夜护航
         if is_late_night:
             if sentiment_tag in {"comfort", "dont_cry", "fail", "company"}:
-                tag_candidates.append(sentiment_tag)
-                tag_candidates.append("sanity")
+                candidates += [sentiment_tag, "sanity"]
             else:
-                tag_candidates.append("sanity")
+                candidates.append("sanity")
 
-        # 2. 情感标签优先
-        if sentiment_tag and sentiment_tag not in tag_candidates:
-            tag_candidates.append(sentiment_tag)
+        # 情感标签
+        if sentiment_tag and sentiment_tag not in candidates:
+            candidates.append(sentiment_tag)
 
-        # 3. 用户配置的默认标签
-        if base_tag and base_tag not in tag_candidates:
-            tag_candidates.append(base_tag)
+        # 默认标签
+        if base_tag and base_tag not in candidates:
+            candidates.append(base_tag)
 
-        # 4. 实在找不到，就交给 voice_manager 的默认逻辑（None）
-        if not tag_candidates:
+        if not candidates:
             return None
 
-        # ============ 智能去重与随机 ============
+        # 智能去重（按会话）
+        last_tag = session_state["last_tag"]
+        if self.config.get("features.smart_voice_pick", True):
+            if last_tag in candidates and sentiment_score < 12:
+                candidates = [c for c in candidates if c != last_tag] or candidates
 
-        if not self.config.get("features.smart_voice_pick", True):
-            # 关闭智能选择时，简单随机
-            return random.choice(tag_candidates)
+        # 权重选择
+        if sentiment_tag and sentiment_tag in candidates and sentiment_score >= 12:
+            weights = [3 if c == sentiment_tag else 1 for c in candidates]
+            return random.choices(candidates, weights=weights, k=1)[0]
 
-        # 避免短时间内重复同一标签（弱去重）
-        # 如情感强度特别高，则允许重复
-        if self.last_tag in tag_candidates and sentiment_score < 12:
-            tag_candidates = [t for t in tag_candidates if t != self.last_tag] or tag_candidates
+        return random.choice(candidates)
 
-        # 简单权重：情感强度高时，优先情感标签
-        if sentiment_tag and sentiment_tag in tag_candidates and sentiment_score >= 12:
-            weights = [3 if t == sentiment_tag else 1 for t in tag_candidates]
-            chosen = random.choices(tag_candidates, weights=weights, k=1)[0]
-        else:
-            chosen = random.choice(tag_candidates)
+    # ==================== 戳一戳 ====================
 
-        return chosen
-
-    async def send_voice_by_tag(self, event: AstrMessageEvent, tag: str | None):
-        """根据标签选择语音并发送，同时记录上一次选择，用于后续智能选择。"""
-        rel_path = self.voice_manager.get_voice(tag or None)
-        if not rel_path and tag:
-            # 当前标签没有语音时，尝试使用默认（None）
-            rel_path = self.voice_manager.get_voice(None)
-
-        if rel_path:
-            self.last_tag = tag
-            self.last_voice_path = rel_path
-            async for msg in self.safe_yield_voice(event, rel_path):
-                yield msg
-
-    # ==================== 戳一戳 / Poke 处理 ====================
-
-    def is_poke_event(self, event: AstrMessageEvent, text: str) -> bool:
-        """统一判断是否为戳一戳事件，兼容多平台表现形式。"""
+    def is_poke_event(self, event, text):
         if not self.config.get("features.nudge_response", True):
             return False
 
-        # A. 通过 message_obj.type 判断（兼容性写法）
         msg_type = getattr(getattr(event, "message_obj", None), "type", None)
         if msg_type == "poke":
             return True
 
-        # B. 通过文本特征判断
-        if "[戳一戳]" in text or "戳了戳" in text:
-            return True
+        return "[戳一戳]" in text or "戳了戳" in text
 
-        return False
-
-    async def handle_poke(self, event: AstrMessageEvent):
-        """处理戳一戳触发的语音回复。"""
-        logger.info(f"[Echo of Theresia] 检测到信赖触摸 (Poke)")
-        interaction_type = random.choice(["poke", "trust"])
-        rel_path = self.voice_manager.get_voice(interaction_type)
+    async def handle_poke(self, event):
+        tag = random.choice(["poke", "trust"])
+        rel_path = self.voice_manager.get_voice(tag)
         if rel_path:
             async for msg in self.safe_yield_voice(event, rel_path):
                 yield msg
 
-    # ==================== 文本触发主入口 ====================
+    # ==================== 文本触发 ====================
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True):
             return
 
-        # 统一预取文本，允许为空
         text = (event.message_str or "").strip()
         text_lower = text.lower()
 
-        # 1. 戳一戳优先处理（可能无文本）
+        # 戳一戳
         if self.is_poke_event(event, text):
             async for msg in self.handle_poke(event):
                 yield msg
             return
 
-        # 2. 其它非文本消息直接忽略（防止 list index out of range）
         if not text:
             return
 
-        # 3. 指令前缀/保留关键字拦截
-        cmd_prefix = self.config.get("command.prefix", "/theresia").lower()
-        if text_lower.startswith(cmd_prefix):
+        # 指令前缀
+        if text_lower.startswith(self.config.get("command.prefix", "/theresia").lower()):
             return
 
-        # 使用 split 限制分割次数，更安全更高效
-        first_word = text_lower.split(" ", 1)[0]
-        if first_word == "theresia":
+        # 英文裸命令
+        if text_lower.split(" ", 1)[0] == "theresia":
             return
 
-        now = datetime.datetime.now()
-        hour = now.hour
-        is_late_night = 1 <= hour < 5
-
-        # 4. 判断是否真正“叫了名字”
-        keywords = [kw.lower() for kw in self.config["command.keywords"]]
-        has_called_name = any(kw in text_lower for kw in keywords)
-        if not has_called_name:
-            # 未呼叫角色名，不触发角色语音逻辑
+        # 是否叫名字
+        keywords = [str(k).lower() for k in self.config.get("command.keywords", [])]
+        if not any(k in text_lower for k in keywords):
             return
 
-        # ==================== 冷却机制（非强制绕过场景） ====================
+        # 会话状态
+        state = self._get_session_state(event.session_id)
+        now = time.time()
 
-        # 默认不绕过冷却；仅在“理智护航”时绕过
-        bypass_cooldown = False
+        # 深夜
+        hour = datetime.datetime.now().hour
+        night_start = int(self.config.get("sanity.night_start", 1))
+        night_end = int(self.config.get("sanity.night_end", 5))
+        is_late_night = night_start <= hour < night_end
 
-        # ==================== 触发逻辑：理智护航 / 情感共鸣 / 标准触发 ====================
-
-        target_tag = None
-        sentiment_tag = None
-        sentiment_score = 0
-
-        # 1. 理智护航（优先级最高）
-        if self.config.get("features.sanity_mode", True) and is_late_night:
-            logger.info(f"[Echo of Theresia] 触发理智护航: {text}")
-            target_tag = "sanity"
-            bypass_cooldown = True
-            # 发送一条额外的文本提示（不影响语音）
-            yield event.plain_result("博士，夜已经很深了……还在工作吗？")
-
-        # 2. 情感共鸣
+        # 情感
+        sentiment_tag, sentiment_score = (None, 0)
         if self.config.get("features.emotion_detect", True):
             sentiment_tag, sentiment_score = self.analyze_sentiment(text)
-            if sentiment_tag:
-                logger.info(f"[Echo of Theresia] 情感共鸣捕获: {sentiment_tag} (score={sentiment_score})")
 
-        # 3. 整体触发判断
-        # 如果没有理智护航也没有情感标签，就走默认标签
-        if not target_tag and not sentiment_tag:
-            logger.info(f"[Echo of Theresia] 标准关键词触发")
-            target_tag = self.config.get("voice.default_tag", "")
+        # 默认标签
+        base_tag = self.config.get("voice.default_tag", "")
 
-        # 4. 冷却判断（理智护航可绕过）
-        current_time = time.time()
-        if not bypass_cooldown and (current_time - self.last_trigger_time < self.cooldown_seconds):
+        # 冷却
+        if now - state["last_trigger_time"] < 10:
             return
 
-        # 5. 通过智能策略最终决定使用哪个标签
+        # 智能选择
         final_tag = self.pick_voice_tag(
-            base_tag=target_tag,
+            base_tag=base_tag,
             sentiment_tag=sentiment_tag,
             sentiment_score=sentiment_score,
-            is_late_night=is_late_night
+            is_late_night=is_late_night,
+            session_state=state
         )
 
-        # 6. 语音发送
-        if final_tag is not None or target_tag is None:
-            self.last_trigger_time = current_time
-            async for msg in self.send_voice_by_tag(event, final_tag):
-                yield msg
+        # 发送
+        state["last_trigger_time"] = now
+        state["last_tag"] = final_tag
 
-    # ==================== 指令入口 ====================
+        async for msg in self.send_voice_by_tag(event, final_tag):
+            yield msg
+
+    # ==================== 指令 ====================
 
     @filter.command("theresia")
-    async def main_command_handler(self, event: AstrMessageEvent, action: str = None, payload: str = None):
+    async def main_command(self, event: AstrMessageEvent, action: str = None, payload: str = None):
         action = (action or "").lower().strip()
 
         if not action:
-            yield event.plain_result(self._get_help_text(brief=True))
+            yield event.plain_result("Echo of Theresia v2.0 已就绪~\n发送 /theresia help 查看完整指令。")
             return
 
         if action == "help":
-            yield event.plain_result(self._get_help_text(brief=False))
+            yield event.plain_result(self._help_text())
 
         elif action == "enable":
             self.config["enabled"] = True
@@ -416,7 +318,6 @@ class TheresiaVoicePlugin(Star):
             yield event.plain_result("特雷西娅语音插件已禁用。")
 
         elif action == "voice":
-            # 指令调用，直接按标签播放，不走智能选择逻辑
             tag = (payload or self.config.get("voice.default_tag", "")).strip() or None
             async for msg in self.send_voice_by_tag(event, tag):
                 yield msg
@@ -444,11 +345,9 @@ class TheresiaVoicePlugin(Star):
         else:
             yield event.plain_result(f"未知指令: {action}")
 
-    def _get_help_text(self, brief: bool = True) -> str:
-        if brief:
-            return "Echo of Theresia (v1.4.0) 已就绪~\n发送 /theresia help 查看完整指令。"
+    def _help_text(self):
         return (
-            "【Echo of Theresia】\n"
+            "【Echo of Theresia v2.0】\n"
             "/theresia help\n"
             "/theresia enable/disable\n"
             "/theresia voice [标签]\n"
@@ -457,8 +356,9 @@ class TheresiaVoicePlugin(Star):
             "/theresia set_target\n"
             "/theresia unset_target\n"
             "特性：\n"
-            "1. 情感共鸣：识别累/难过等情绪\n"
-            "2. 理智护航：深夜劝睡\n"
-            "3. 信赖触摸：检测戳一戳事件\n"
-            "4. 智能语音：根据时间/情绪避免重复、动态选语音"
+            "1. 多会话独立状态\n"
+            "2. 情感共鸣：识别累/难过等情绪\n"
+            "3. 深夜护航：可配置时间段\n"
+            "4. 信赖触摸：检测戳一戳事件\n"
+            "5. 智能语音：避免重复、动态选语音\n"
         )

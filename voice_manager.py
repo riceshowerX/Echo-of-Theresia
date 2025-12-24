@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import json
 import random
 import re
 from pathlib import Path
@@ -11,9 +10,12 @@ class VoiceEntry:
     __slots__ = ("rel_path", "tags", "weights")
 
     def __init__(self, rel_path: str, tags: Set[str], weights: Dict[str, int]):
+        # rel_path 统一用 str，相对于插件根目录
         self.rel_path = rel_path
-        self.tags = tags
-        self.weights = weights  # 每个标签对应的权重
+        # 所有标签统一为小写
+        self.tags = {str(t).lower() for t in tags}
+        # 权重字典也用小写 key
+        self.weights = {str(k).lower(): int(v) for k, v in weights.items()}
 
 
 class VoiceManager:
@@ -22,10 +24,10 @@ class VoiceManager:
     - 支持标签权重
     - 支持智能随机（避免重复）
     - 支持更强的标签提取
+    - 统一标签大小写（全部小写）
     """
 
-    # ==================== 预设映射表（支持权重） ====================
-    PRESET_MAPPING = {
+    PRESET_MAPPING: Dict[str, Dict[str, int]] = {
         "闲置": {"sanity": 3, "rest": 2, "晚安": 2, "休息": 2, "累": 1},
         "问候": {"morning": 3, "早安": 2},
         "选中干员2": {"comfort": 3, "安慰": 2, "别怕": 2, "fear": 1},
@@ -38,18 +40,15 @@ class VoiceManager:
         "生日": {"birthday": 3},
     }
 
-    # ===============================================================
-
     def __init__(self, plugin):
         self.plugin = plugin
         self.base_dir = Path(__file__).parent.resolve()
         self.voice_dir = self.base_dir / "data" / "voices"
-        self.index_file = self.voice_dir / "index.json"
 
         self.entries: List[VoiceEntry] = []
         self.all_tags: Set[str] = set()
 
-        # 用于避免重复播放
+        # 全局“上一次播放的语音”（跨会话）
         self.last_voice_path: Optional[str] = None
 
     # ==================== 加载与扫描 ====================
@@ -70,14 +69,19 @@ class VoiceManager:
     def _scan_voices(self) -> None:
         if not self.voice_dir.exists():
             self.voice_dir.mkdir(parents=True, exist_ok=True)
+            logger.warning(f"[语音管理] 语音目录不存在，已创建: {self.voice_dir}")
             return
 
         audio_extensions = {".mp3", ".wav", ".ogg", ".m4a", ".silk", ".aac", ".flac"}
-        files = [f for f in self.voice_dir.iterdir() if f.is_file() and f.suffix.lower() in audio_extensions]
+        files = [
+            f for f in self.voice_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in audio_extensions
+        ]
 
         logger.info(f"[语音管理] 扫描到 {len(files)} 个音频文件")
 
         for file_path in files:
+            # 相对插件根目录（与 main.py 中的拼接方式兼容）
             rel_path = str(file_path.relative_to(self.base_dir))
 
             tags, weights = self._extract_tags(file_path.stem)
@@ -88,25 +92,29 @@ class VoiceManager:
 
             entry = VoiceEntry(rel_path=rel_path, tags=tags, weights=weights)
             self.entries.append(entry)
-            self.all_tags.update(tags)
+            self.all_tags.update(entry.tags)
+
+        logger.info(f"[语音管理] 完成索引，标签总数: {len(self.all_tags)}")
 
     # ==================== 标签提取（增强版） ====================
 
     def _extract_tags(self, filename: str) -> (Set[str], Dict[str, int]):
-        tags = set()
-        weights = {}
+        tags: Set[str] = set()
+        weights: Dict[str, int] = {}
 
-        # 1. 预设映射（带权重）
+        # 1. 预设映射（键值匹配文件名）
         for key, preset in self.PRESET_MAPPING.items():
             if key in filename:
                 for tag, w in preset.items():
-                    tags.add(tag)
-                    weights[tag] = max(weights.get(tag, 0), w)
+                    tag_norm = str(tag).lower()
+                    tags.add(tag_norm)
+                    weights[tag_norm] = max(weights.get(tag_norm, 0), int(w))
 
-        # 2. 下划线分割
+        # 2. 下划线分割，抽取英文/拼音型标签
         parts = filename.lower().split("_")
         for part in parts:
             cleaned = re.sub(r"^\d+|\d+$", "", part)
+            cleaned = cleaned.strip()
             if len(cleaned) > 1:
                 tags.add(cleaned)
                 weights.setdefault(cleaned, 1)
@@ -114,8 +122,9 @@ class VoiceManager:
         # 3. 中文词提取
         chinese_words = re.findall(r"[\u4e00-\u9fa5]+", filename)
         for word in chinese_words:
-            tags.add(word)
-            weights.setdefault(word, 1)
+            word_norm = word.lower()
+            tags.add(word_norm)
+            weights.setdefault(word_norm, 1)
 
         return tags, weights
 
@@ -123,46 +132,50 @@ class VoiceManager:
 
     def get_voice(self, tag: Optional[str] = None) -> Optional[str]:
         if not self.entries:
+            logger.warning("[语音管理] 当前语音库为空")
             return None
 
         # 1. 无标签 → 全局随机（避免重复）
         if not tag:
-            return self._pick_non_repeating([e.rel_path for e in self.entries])
+            candidates = [e.rel_path for e in self.entries]
+            return self._pick_non_repeating(candidates)
 
-        tag_lower = tag.lower()
+        tag_lower = str(tag).lower()
 
         # 2. 精确匹配标签
-        candidates = [e for e in self.entries if tag_lower in e.tags]
+        candidates_entries = [e for e in self.entries if tag_lower in e.tags]
 
         # 3. 模糊匹配文件名
-        if not candidates:
-            candidates = [
+        if not candidates_entries:
+            candidates_entries = [
                 e for e in self.entries
                 if tag_lower in Path(e.rel_path).stem.lower()
             ]
 
-        if not candidates:
+        if not candidates_entries:
+            logger.info(f"[语音管理] 未找到匹配标签的语音: tag={tag_lower}")
             return None
 
         # 4. 权重选择（智能随机）
-        weighted_list = []
-        for e in candidates:
+        weighted_paths: List[str] = []
+        for e in candidates_entries:
             weight = e.weights.get(tag_lower, 1)
-            weighted_list.extend([e.rel_path] * weight)
+            # 防止权重为 0 或负数
+            weight = max(int(weight), 1)
+            weighted_paths.extend([e.rel_path] * weight)
 
-        return self._pick_non_repeating(weighted_list)
+        return self._pick_non_repeating(weighted_paths)
 
     # ==================== 避免重复播放 ====================
 
-    def _pick_non_repeating(self, items: List[str]) -> str:
-        """避免连续播放同一条语音"""
+    def _pick_non_repeating(self, items: List[str]) -> Optional[str]:
+        """避免连续播放同一条语音（全局维度）"""
         if not items:
             return None
 
         if len(items) == 1:
             chosen = items[0]
         else:
-            # 避免重复
             filtered = [i for i in items if i != self.last_voice_path]
             chosen = random.choice(filtered or items)
 
@@ -172,9 +185,12 @@ class VoiceManager:
     # ==================== 工具方法 ====================
 
     def get_tags(self) -> List[str]:
-        return sorted(list(self.all_tags))
+        """返回当前语音库中所有标签（排序后）"""
+        return sorted(self.all_tags)
 
     def get_voice_count(self, tag: Optional[str] = None) -> int:
+        """获取语音条数，可按标签过滤"""
         if not tag:
             return len(self.entries)
-        return sum(1 for e in self.entries if tag.lower() in e.tags)
+        t = str(tag).lower()
+        return sum(1 for e in self.entries if t in e.tags)
