@@ -9,8 +9,9 @@ from pathlib import Path
 from astrbot.api.all import *
 from astrbot.api.star import Star, Context, register
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.message_components import Record
+from astrbot.api.message_components import Record, Poke
 from astrbot.api import logger
+from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
 
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
@@ -65,7 +66,6 @@ class TheresiaVoicePlugin(Star):
         self.scheduler = VoiceScheduler(self, self.voice_manager)
 
     async def on_load(self):
-        """生命周期：插件加载完成后启动 scheduler"""
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
         logger.info("[Echo of Theresia v2.0] 插件加载完成")
@@ -88,11 +88,9 @@ class TheresiaVoicePlugin(Star):
         self.config.setdefault("features.nudge_response", True)
         self.config.setdefault("features.smart_voice_pick", True)
 
-        # 深夜护航时间段
         self.config.setdefault("sanity.night_start", 1)
         self.config.setdefault("sanity.night_end", 5)
 
-        # 定时任务
         self.config.setdefault("schedule.enabled", False)
         self.config.setdefault("schedule.time", "08:00")
         self.config.setdefault("schedule.frequency", "daily")
@@ -173,52 +171,72 @@ class TheresiaVoicePlugin(Star):
     def pick_voice_tag(self, *, base_tag, sentiment_tag, sentiment_score, is_late_night, session_state):
         candidates = []
 
-        # 深夜护航
         if is_late_night:
             if sentiment_tag in {"comfort", "dont_cry", "fail", "company"}:
                 candidates += [sentiment_tag, "sanity"]
             else:
                 candidates.append("sanity")
 
-        # 情感标签
         if sentiment_tag and sentiment_tag not in candidates:
             candidates.append(sentiment_tag)
 
-        # 默认标签
         if base_tag and base_tag not in candidates:
             candidates.append(base_tag)
 
         if not candidates:
             return None
 
-        # 智能去重（按会话）
         last_tag = session_state["last_tag"]
         if self.config.get("features.smart_voice_pick", True):
             if last_tag in candidates and sentiment_score < 12:
                 candidates = [c for c in candidates if c != last_tag] or candidates
 
-        # 权重选择
         if sentiment_tag and sentiment_tag in candidates and sentiment_score >= 12:
             weights = [3 if c == sentiment_tag else 1 for c in candidates]
             return random.choices(candidates, weights=weights, k=1)[0]
 
         return random.choice(candidates)
 
-    # ==================== 文本戳一戳桥接（方案 A） ====================
+    # ==================== 戳一戳检测（完全参考 PokeproPlugin） ====================
 
     @filter.event_message_type(filter.EventMessageType.ALL)
-    async def _text_poke_bridge(self, event: AstrMessageEvent):
-        """
-        文本戳一戳桥接（最通用方案）
-        兼容 KOOK / QQ / Telegram / OneBot 文本戳一戳
-        """
-        text = (event.message_str or "").lower()
+    async def poke_trigger(self, event: AiocqhttpMessageEvent):
+        raw_message = getattr(event.message_obj, "raw_message", None)
 
-        if any(k in text for k in ["[戳一戳]", "戳了戳", "poke"]):
-            async for msg in self.handle_poke(event):
-                yield msg
+        if (
+            not raw_message
+            or not event.message_obj.message
+            or not isinstance(event.message_obj.message[0], Poke)
+        ):
+            return
 
-    # ==================== 文本触发（名字触发） ====================
+        target_id = raw_message.get("target_id", 0)
+        self_id = raw_message.get("self_id", 0)
+        if target_id != self_id:
+            return
+
+        fake_event = AstrMessageEvent(
+            session_id=str(event.get_group_id() or event.get_sender_id()),
+            message_str="[戳一戳]",
+            message_obj=None
+        )
+
+        async for msg in self.handle_poke(fake_event):
+            yield msg
+
+    # ==================== 戳一戳处理 ====================
+
+    async def handle_poke(self, event: AstrMessageEvent):
+        tag = "poke"
+        rel_path = self.voice_manager.get_voice(tag)
+
+        if not rel_path:
+            rel_path = self.voice_manager.get_voice(None)
+
+        async for msg in self.safe_yield_voice(event, rel_path):
+            yield msg
+
+    # ==================== 文本触发 ====================
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
@@ -231,42 +249,33 @@ class TheresiaVoicePlugin(Star):
         if not text:
             return
 
-        # 指令前缀
         if text_lower.startswith(self.config.get("command.prefix", "/theresia").lower()):
             return
 
-        # 英文裸命令
         if text_lower.split(" ", 1)[0] == "theresia":
             return
 
-        # 是否叫名字
         keywords = [str(k).lower() for k in self.config.get("command.keywords", [])]
         if not any(k in text_lower for k in keywords):
             return
 
-        # 会话状态
         state = self._get_session_state(event.session_id)
         now = time.time()
 
-        # 深夜
         hour = datetime.datetime.now().hour
         night_start = int(self.config.get("sanity.night_start", 1))
         night_end = int(self.config.get("sanity.night_end", 5))
         is_late_night = night_start <= hour < night_end
 
-        # 情感
         sentiment_tag, sentiment_score = (None, 0)
         if self.config.get("features.emotion_detect", True):
             sentiment_tag, sentiment_score = self.analyze_sentiment(text)
 
-        # 默认标签
         base_tag = self.config.get("voice.default_tag", "")
 
-        # 冷却
         if now - state["last_trigger_time"] < 10:
             return
 
-        # 智能选择
         final_tag = self.pick_voice_tag(
             base_tag=base_tag,
             sentiment_tag=sentiment_tag,
@@ -275,7 +284,6 @@ class TheresiaVoicePlugin(Star):
             session_state=state
         )
 
-        # 发送
         state["last_trigger_time"] = now
         state["last_tag"] = final_tag
 
@@ -285,7 +293,6 @@ class TheresiaVoicePlugin(Star):
     # ==================== 按标签发送语音 ====================
 
     async def send_voice_by_tag(self, event: AstrMessageEvent, tag: str | None):
-        """根据标签选择语音并发送"""
         rel_path = self.voice_manager.get_voice(tag or None)
         if not rel_path and tag:
             rel_path = self.voice_manager.get_voice(None)
@@ -361,6 +368,6 @@ class TheresiaVoicePlugin(Star):
             "1. 多会话独立状态\n"
             "2. 情感共鸣：识别累/难过等情绪\n"
             "3. 深夜护航：可配置时间段\n"
-            "4. 信赖触摸：检测戳一戳事件（文本兼容）\n"
+            "4. 信赖触摸：检测戳一戳事件（OneBot 原生 Poke）\n"
             "5. 智能语音：避免重复、动态选语音\n"
         )
