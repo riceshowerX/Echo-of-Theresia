@@ -204,32 +204,32 @@ class TheresiaVoicePlugin(Star):
 
         return random.choice(candidates)
 
-    # ==================== 通用戳一戳处理器（兼容所有 AstrBot 版本） ====================
+    # ==================== raw_event 戳一戳桥接（核心） ====================
 
-    def is_poke_event(self, event, text):
-        """兼容所有版本的戳一戳检测"""
-        if not self.config.get("features.nudge_response", True):
-            return False
+    @filter.raw_event
+    async def _raw_event_poke_bridge(self, raw: dict):
+        """
+        兼容所有 AstrBot 版本的戳一戳事件桥接器：
+        - OneBot v11: notice.poke
+        - KOOK: eventType = "message.btn.click"
+        - Telegram: callback_query / nudge
+        """
 
-        # 1. OneBot v11（旧版 AstrBot）：戳一戳作为 message 事件
-        msg_type = getattr(getattr(event, "message_obj", None), "type", None)
-        if msg_type == "poke":
-            return True
+        # OneBot v11（aiocqhttp）戳一戳事件
+        if raw.get("post_type") == "notice" and raw.get("notice_type") == "poke":
+            session_id = str(raw.get("group_id") or raw.get("user_id"))
+            logger.info(f"[Echo v2.0] raw_event 捕获到 OneBot 戳一戳 session={session_id}")
 
-        # 2. 文本形式（KOOK / Telegram / QQ）
-        if "[戳一戳]" in text or "戳了戳" in text or "poke" in text.lower():
-            return True
+            fake_event = AstrMessageEvent(
+                session_id=session_id,
+                message_str="[戳一戳]",
+                message_obj=None
+            )
 
-        return False
-
-    async def handle_poke(self, event):
-        tag = random.choice(["poke", "trust"])
-        rel_path = self.voice_manager.get_voice(tag)
-        if rel_path:
-            async for msg in self.safe_yield_voice(event, rel_path):
+            async for msg in self.handle_poke(fake_event):
                 yield msg
 
-    # ==================== 文本触发 ====================
+    # ==================== 文本触发（兼容戳一戳文本） ====================
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
@@ -239,8 +239,8 @@ class TheresiaVoicePlugin(Star):
         text = (event.message_str or "").strip()
         text_lower = text.lower()
 
-        # 戳一戳事件（兼容所有版本）
-        if self.is_poke_event(event, text):
+        # 文本戳一戳（KOOK / Telegram / QQ）
+        if "[戳一戳]" in text or "戳了戳" in text or "poke" in text_lower:
             async for msg in self.handle_poke(event):
                 yield msg
             return
@@ -378,6 +378,6 @@ class TheresiaVoicePlugin(Star):
             "1. 多会话独立状态\n"
             "2. 情感共鸣：识别累/难过等情绪\n"
             "3. 深夜护航：可配置时间段\n"
-            "4. 信赖触摸：检测戳一戳事件\n"
+            "4. 信赖触摸：检测戳一戳事件（raw_event 全兼容）\n"
             "5. 智能语音：避免重复、动态选语音\n"
         )
