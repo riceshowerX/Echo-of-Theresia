@@ -20,7 +20,7 @@ from .scheduler import VoiceScheduler
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "2.0.1",
+    "2.0.2",
     "明日方舟特雷西娅角色语音插件（v2.0 修复版）"
 )
 class TheresiaVoicePlugin(Star):
@@ -203,7 +203,6 @@ class TheresiaVoicePlugin(Star):
     async def poke_trigger(self, event: AiocqhttpMessageEvent):
         """
         处理戳一戳事件
-        修复说明：AstrBot更新后，构造AstrMessageEvent必须传入platform_meta
         """
         raw_message = getattr(event.message_obj, "raw_message", None)
 
@@ -223,8 +222,9 @@ class TheresiaVoicePlugin(Star):
         fake_event = AstrMessageEvent(
             session_id=str(event.get_group_id() or event.get_sender_id()),
             message_str="[戳一戳]",
-            message_obj=None,
-            platform_meta=event.platform_meta  # <--- 必须添加此参数
+            # 必须传入有效的 message_obj，这里复用原始事件的 message_obj
+            message_obj=event.message_obj, 
+            platform_meta=event.platform_meta
         )
         # ================== 修复部分 END ====================
 
