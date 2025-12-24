@@ -3,7 +3,6 @@ import asyncio
 import datetime
 import time
 import random
-import re
 from pathlib import Path
 
 from astrbot.api.all import *
@@ -15,38 +14,15 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import Aioc
 
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
-
+from .sentiment_analyzer import SentimentAnalyzer  # <--- 导入新模块
 
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "2.0.2",
-    "明日方舟特雷西娅角色语音插件（v2.0 修复版）"
+    "2.1.0",
+    "明日方舟特雷西娅角色语音插件（v2.1 分离重构版）"
 )
 class TheresiaVoicePlugin(Star):
-
-    # ==================== 情感定义 ====================
-
-    EMOTION_DEFINITIONS = {
-        "晚安": ("sanity", 10),
-        "早安": ("morning", 9),
-        "救命": ("comfort", 8),
-        "痛苦": ("dont_cry", 8),
-        "难过": ("comfort", 7),
-        "害怕": ("comfort", 7),
-        "累":   ("sanity", 6),
-        "休息": ("sanity", 6),
-        "失败": ("fail", 6),
-        "孤独": ("company", 6),
-        "抱抱": ("trust", 5),
-        "戳":   ("poke", 4),
-    }
-
-    INTENSIFIERS = ["好", "太", "真", "非常", "超级", "死", "特别"]
-    NEGATIONS = ["不", "没", "别", "勿", "无"]
-    NEGATION_WINDOW = 5
-
-    # ==================== 初始化 ====================
 
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
@@ -55,20 +31,23 @@ class TheresiaVoicePlugin(Star):
         self._init_default_config()
 
         # 多会话独立状态
-        self.session_state = {}  # { session_id: { last_tag, last_voice_path, last_trigger_time } }
+        self.session_state = {}
 
         self.plugin_root = Path(__file__).parent.resolve()
 
-        # 管理器
+        # === 初始化各模块 ===
         self.voice_manager = VoiceManager(self)
         self.voice_manager.load_voices()
 
         self.scheduler = VoiceScheduler(self, self.voice_manager)
+        
+        # 初始化情感分析器
+        self.analyzer = SentimentAnalyzer()
 
     async def on_load(self):
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-        logger.info("[Echo of Theresia v2.0] 插件加载完成")
+        logger.info("[Echo of Theresia] 插件加载完成")
 
     async def on_unload(self):
         await self.scheduler.stop()
@@ -77,7 +56,6 @@ class TheresiaVoicePlugin(Star):
 
     def _init_default_config(self):
         self.config.setdefault("enabled", True)
-
         self.config.setdefault("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
         self.config.setdefault("command.prefix", "/theresia")
         self.config.setdefault("voice.default_tag", "")
@@ -126,45 +104,14 @@ class TheresiaVoicePlugin(Star):
 
         abs_path = (self.plugin_root / rel_path).resolve()
         if not abs_path.exists():
-            logger.warning(f"[Echo v2.0] 文件缺失: {rel_path}")
+            logger.warning(f"[Echo] 文件缺失: {rel_path}")
             return
 
         try:
             yield event.chain_result([Record(file=str(abs_path))])
         except Exception as e:
             import traceback
-            logger.error(f"[Echo v2.0] 发送失败: {e} | session={event.session_id} | path={rel_path}")
-            logger.error(traceback.format_exc())
-
-    # ==================== 情感分析 ====================
-
-    def analyze_sentiment(self, text: str):
-        text_lower = text.lower()
-        best_tag = None
-        max_score = 0
-
-        for keyword, (tag, base_score) in self.EMOTION_DEFINITIONS.items():
-            keyword_lower = keyword.lower()
-            if keyword_lower not in text_lower:
-                continue
-
-            for match in re.finditer(re.escape(keyword_lower), text_lower):
-                kw_index = match.start()
-                score = base_score
-
-                if self.config.get("features.smart_negation", True):
-                    window = text_lower[max(0, kw_index - self.NEGATION_WINDOW):kw_index]
-                    if any(neg in window for neg in self.NEGATIONS):
-                        continue
-
-                if any(i in text_lower for i in self.INTENSIFIERS):
-                    score += 5
-
-                if score > max_score:
-                    max_score = score
-                    best_tag = tag
-
-        return best_tag, max_score
+            logger.error(f"[Echo] 发送失败: {e} | session={event.session_id} | path={rel_path}")
 
     # ==================== 智能语音选择 ====================
 
@@ -172,6 +119,7 @@ class TheresiaVoicePlugin(Star):
         candidates = []
 
         if is_late_night:
+            # 深夜模式下，优先理智、安慰
             if sentiment_tag in {"comfort", "dont_cry", "fail", "company"}:
                 candidates += [sentiment_tag, "sanity"]
             else:
@@ -187,23 +135,24 @@ class TheresiaVoicePlugin(Star):
             return None
 
         last_tag = session_state["last_tag"]
+        # 智能防重复：如果上次播过这个类型，且情绪分不是特别高，尝试换一个
         if self.config.get("features.smart_voice_pick", True):
             if last_tag in candidates and sentiment_score < 12:
-                candidates = [c for c in candidates if c != last_tag] or candidates
+                filtered = [c for c in candidates if c != last_tag]
+                if filtered:
+                    candidates = filtered
 
+        # 如果情绪分很高，大幅增加该情绪的权重
         if sentiment_tag and sentiment_tag in candidates and sentiment_score >= 12:
             weights = [3 if c == sentiment_tag else 1 for c in candidates]
             return random.choices(candidates, weights=weights, k=1)[0]
 
         return random.choice(candidates)
 
-    # ==================== 戳一戳检测（完全参考 PokeproPlugin） ====================
+    # ==================== 戳一戳检测 ====================
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def poke_trigger(self, event: AiocqhttpMessageEvent):
-        """
-        处理戳一戳事件
-        """
         raw_message = getattr(event.message_obj, "raw_message", None)
 
         if (
@@ -218,28 +167,22 @@ class TheresiaVoicePlugin(Star):
         if target_id != self_id:
             return
 
-        # ================== 修复部分 START ==================
+        # 修复后的事件构造
         fake_event = AstrMessageEvent(
             session_id=str(event.get_group_id() or event.get_sender_id()),
             message_str="[戳一戳]",
-            # 必须传入有效的 message_obj，这里复用原始事件的 message_obj
             message_obj=event.message_obj, 
             platform_meta=event.platform_meta
         )
-        # ================== 修复部分 END ====================
 
         async for msg in self.handle_poke(fake_event):
             yield msg
 
-    # ==================== 戳一戳处理 ====================
-
     async def handle_poke(self, event: AstrMessageEvent):
         tag = "poke"
         rel_path = self.voice_manager.get_voice(tag)
-
         if not rel_path:
             rel_path = self.voice_manager.get_voice(None)
-
         async for msg in self.safe_yield_voice(event, rel_path):
             yield msg
 
@@ -252,16 +195,16 @@ class TheresiaVoicePlugin(Star):
 
         text = (event.message_str or "").strip()
         text_lower = text.lower()
-
         if not text:
             return
 
+        # 排除指令
         if text_lower.startswith(self.config.get("command.prefix", "/theresia").lower()):
             return
-
         if text_lower.split(" ", 1)[0] == "theresia":
             return
 
+        # 关键词检测
         keywords = [str(k).lower() for k in self.config.get("command.keywords", [])]
         if not any(k in text_lower for k in keywords):
             return
@@ -269,20 +212,27 @@ class TheresiaVoicePlugin(Star):
         state = self._get_session_state(event.session_id)
         now = time.time()
 
+        # CD 检查
+        if now - state["last_trigger_time"] < 10:
+            return
+
+        # 环境判断
         hour = datetime.datetime.now().hour
         night_start = int(self.config.get("sanity.night_start", 1))
         night_end = int(self.config.get("sanity.night_end", 5))
         is_late_night = night_start <= hour < night_end
 
+        # === 调用新的情感分析模块 ===
         sentiment_tag, sentiment_score = (None, 0)
         if self.config.get("features.emotion_detect", True):
-            sentiment_tag, sentiment_score = self.analyze_sentiment(text)
-
+            enable_neg = self.config.get("features.smart_negation", True)
+            # 使用 self.analyzer
+            sentiment_tag, sentiment_score = self.analyzer.analyze(text, enable_negation=enable_neg)
+        
+        # 默认标签
         base_tag = self.config.get("voice.default_tag", "")
 
-        if now - state["last_trigger_time"] < 10:
-            return
-
+        # 决策
         final_tag = self.pick_voice_tag(
             base_tag=base_tag,
             sentiment_tag=sentiment_tag,
@@ -291,13 +241,12 @@ class TheresiaVoicePlugin(Star):
             session_state=state
         )
 
+        # 更新状态
         state["last_trigger_time"] = now
         state["last_tag"] = final_tag
 
         async for msg in self.send_voice_by_tag(event, final_tag):
             yield msg
-
-    # ==================== 按标签发送语音 ====================
 
     async def send_voice_by_tag(self, event: AstrMessageEvent, tag: str | None):
         rel_path = self.voice_manager.get_voice(tag or None)
@@ -315,7 +264,7 @@ class TheresiaVoicePlugin(Star):
         action = (action or "").lower().strip()
 
         if not action:
-            yield event.plain_result("Echo of Theresia v2.0 已就绪~\n发送 /theresia help 查看完整指令。")
+            yield event.plain_result("Echo of Theresia v2.1 (Refactored) 已就绪~\n发送 /theresia help 查看完整指令。")
             return
 
         if action == "help":
@@ -363,18 +312,12 @@ class TheresiaVoicePlugin(Star):
 
     def _help_text(self):
         return (
-            "【Echo of Theresia v2.0】\n"
+            "【Echo of Theresia v2.1】\n"
             "/theresia help\n"
             "/theresia enable/disable\n"
             "/theresia voice [标签]\n"
             "/theresia tags\n"
             "/theresia update\n"
             "/theresia set_target\n"
-            "/theresia unset_target\n"
-            "特性：\n"
-            "1. 多会话独立状态\n"
-            "2. 情感共鸣：识别累/难过等情绪\n"
-            "3. 深夜护航：可配置时间段\n"
-            "4. 信赖触摸：检测戳一戳事件（OneBot 原生 Poke）\n"
-            "5. 智能语音：避免重复、动态选语音\n"
+            "/theresia unset_target"
         )
