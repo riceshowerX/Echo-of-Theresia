@@ -11,14 +11,6 @@ from astrbot.api import logger
 from astrbot.api.message_components import Record
 
 class VoiceScheduler:
-    """
-    Echo of Theresia v3.0 — 拟人化时空调度器
-    特性：
-    - Temporal Jitter: 时间抖动防风控
-    - Polymorphic Dispatch: 千人千面（每个群收到不同的语音）
-    - Context Injection: 基于时间的上下文标签注入
-    - Breakpoint Compensation: 掉线重连后的断点补发
-    """
 
     def __init__(self, plugin, voice_manager):
         self.plugin = plugin
