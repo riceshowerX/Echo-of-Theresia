@@ -204,18 +204,23 @@ class TheresiaVoicePlugin(Star):
 
         return random.choice(candidates)
 
-    # ==================== 戳一戳事件（OneBot Notice） ====================
+    # ==================== 通用戳一戳处理器（兼容所有 AstrBot 版本） ====================
 
-    @filter.event_notice_type("poke")
-    async def on_poke(self, event: AstrMessageEvent):
-        """处理 OneBot 的戳一戳事件"""
+    def is_poke_event(self, event, text):
+        """兼容所有版本的戳一戳检测"""
         if not self.config.get("features.nudge_response", True):
-            return
+            return False
 
-        logger.info(f"[Echo v2.0] 捕获到戳一戳事件 session={event.session_id}")
+        # 1. OneBot v11（旧版 AstrBot）：戳一戳作为 message 事件
+        msg_type = getattr(getattr(event, "message_obj", None), "type", None)
+        if msg_type == "poke":
+            return True
 
-        async for msg in self.handle_poke(event):
-            yield msg
+        # 2. 文本形式（KOOK / Telegram / QQ）
+        if "[戳一戳]" in text or "戳了戳" in text or "poke" in text.lower():
+            return True
+
+        return False
 
     async def handle_poke(self, event):
         tag = random.choice(["poke", "trust"])
@@ -233,6 +238,12 @@ class TheresiaVoicePlugin(Star):
 
         text = (event.message_str or "").strip()
         text_lower = text.lower()
+
+        # 戳一戳事件（兼容所有版本）
+        if self.is_poke_event(event, text):
+            async for msg in self.handle_poke(event):
+                yield msg
+            return
 
         if not text:
             return
