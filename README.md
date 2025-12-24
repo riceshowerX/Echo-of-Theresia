@@ -2,7 +2,7 @@
 <div align="center">
 
 # 👑 Echo of Theresia  
-### 明日方舟 · 特雷西娅语音插件
+### 特雷西娅语音插件
 
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-purple?style=flat-square)](https://github.com/Soulter/AstrBot)
 [![Version](https://img.shields.io/badge/Version-2.2.0-pink?style=flat-square)](https://github.com/riceshowerX/Echo-of-Theresia)
