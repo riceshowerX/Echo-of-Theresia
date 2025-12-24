@@ -98,6 +98,7 @@ class TheresiaVoicePlugin(Star):
         self.config.setdefault("schedule.frequency", "daily")
         self.config.setdefault("schedule.voice_tags", [])
         self.config.setdefault("schedule.target_sessions", [])
+        self.config.setdefault("schedule.weekday", 1)
 
     def _save_config(self):
         try:
@@ -291,6 +292,18 @@ class TheresiaVoicePlugin(Star):
 
         async for msg in self.send_voice_by_tag(event, final_tag):
             yield msg
+
+    # ==================== 按标签发送语音 ====================
+
+    async def send_voice_by_tag(self, event: AstrMessageEvent, tag: str | None):
+        """根据标签选择语音并发送，同时记录上一次选择，用于后续智能选择。"""
+        rel_path = self.voice_manager.get_voice(tag or None)
+        if not rel_path and tag:
+            rel_path = self.voice_manager.get_voice(None)
+
+        if rel_path:
+            async for msg in self.safe_yield_voice(event, rel_path):
+                yield msg
 
     # ==================== 指令 ====================
 
