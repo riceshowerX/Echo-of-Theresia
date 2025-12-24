@@ -19,7 +19,7 @@
       "Theresia"
     ],
     "label": "对话触发词",
-    "description": "当消息包含这些词时，自动触发随机语音回复"
+    "description": "当消息包含这些词时，自动触发特雷西娅的语音回复"
   },
   "voice.default_tag": {
     "type": "string",
@@ -27,12 +27,26 @@
     "label": "默认语音标签",
     "description": "关键词触发时优先查找的语音标签（留空则完全随机）"
   },
+
   "features.sanity_mode": {
     "type": "bool",
     "default": true,
     "label": "理智护航 (深夜模式)",
-    "description": "开启后，凌晨 01:00-05:00 期间触发互动时，会强制回复[闲置]语音进行劝睡。"
+    "description": "开启后，在设定的深夜时段与特雷西娅互动时，会优先回复安抚/休息类语音。"
   },
+  "sanity.night_start": {
+    "type": "int",
+    "default": 1,
+    "label": "深夜开始时间 (小时)",
+    "description": "理智护航的开始小时（0-23），例如 1 表示从 01:00 开始。"
+  },
+  "sanity.night_end": {
+    "type": "int",
+    "default": 5,
+    "label": "深夜结束时间 (小时)",
+    "description": "理智护航的结束小时（0-23，不含此小时），例如 5 表示到 05:00 结束。"
+  },
+
   "features.emotion_detect": {
     "type": "bool",
     "default": true,
@@ -45,6 +59,13 @@
     "label": "智能否定检测",
     "description": "开启后，说「不累」「没难过」等否定句将不会误触发安慰语音。"
   },
+  "features.nudge_response": {
+    "type": "bool",
+    "default": true,
+    "label": "信赖触摸 (戳一戳)",
+    "description": "开启后，戳一戳机器人头像时会触发互动/信赖语音。"
+  },
+
   "schedule.enabled": {
     "type": "bool",
     "default": false,
@@ -55,7 +76,7 @@
     "type": "string",
     "default": "08:00",
     "label": "触发时间",
-    "description": "每天触发的具体时间，格式为 HH:MM (24小时制)"
+    "description": "触发时间，格式为 HH:MM (24小时制)。在 daily/weekly 模式下表示一天中的时间；在 hourly 模式下只使用分钟部分。"
   },
   "schedule.frequency": {
     "type": "string",
@@ -69,23 +90,22 @@
     "label": "发送频率",
     "description": "daily=每天, weekly=每周, hourly=每小时, once=仅发送一次"
   },
+  "schedule.weekday": {
+    "type": "int",
+    "default": 1,
+    "label": "每周发送日",
+    "description": "仅在 weekly 模式下生效：1=周一, 2=周二, ... , 7=周日。"
+  },
   "schedule.voice_tags": {
     "type": "list",
     "default": [],
     "label": "定时语音标签",
-    "description": "定时任务发送的语音类型（例如：早安）。留空则随机发送"
+    "description": "定时任务发送的语音类型（例如：morning、sanity等标签）。留空则随机发送。"
   },
   "schedule.target_sessions": {
     "type": "list",
     "default": [],
     "label": "目标会话ID列表",
-    "description": "建议使用 /theresia set_target 指令自动添加"
-  }
-  ,
-  "features.nudge_response": {
-    "type": "bool",
-    "default": true,
-    "label": "信赖触摸 (戳一戳)",
-    "description": "开启后，戳一戳机器人头像时会触发互动/信赖语音。"
+    "description": "将接收定时语音的会话ID列表。建议使用 /theresia set_target 指令自动添加。"
   }
 }
