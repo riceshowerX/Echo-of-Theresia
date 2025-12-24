@@ -12,6 +12,9 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.message_components import Record
 from astrbot.api import logger
 
+# ★ 关键：直接监听 AstrBot 的底层事件总线
+from astrbot.core.event_bus import event_bus
+
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
 
@@ -54,76 +57,65 @@ class TheresiaVoicePlugin(Star):
         self._init_default_config()
 
         # 多会话独立状态
-        self.session_state = {}  # { session_id: { last_tag, last_voice_path, last_trigger_time } }
+        self.session_state = {}
 
         self.plugin_root = Path(__file__).parent.resolve()
 
-        # 管理器
         self.voice_manager = VoiceManager(self)
         self.voice_manager.load_voices()
 
         self.scheduler = VoiceScheduler(self, self.voice_manager)
 
+        # ★ 注册事件总线监听器（捕获所有 OneBot 原始事件）
+        event_bus.subscribe("default", self._on_raw_event)
+
     async def on_load(self):
-        """生命周期：插件加载完成后启动 scheduler"""
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-        logger.info("[Echo of Theresia v2.0] 插件加载完成")
+        logger.info("[Echo v2.0] 插件加载完成（event_bus 戳一戳桥接已启用）")
 
     async def on_unload(self):
         await self.scheduler.stop()
 
-    # ==================== 配置 ====================
+    # ==================== 原始事件桥接器（核心） ====================
 
-    def _init_default_config(self):
-        self.config.setdefault("enabled", True)
+    async def _on_raw_event(self, platform: str, event: dict):
+        """
+        兼容所有 AstrBot 版本的戳一戳事件桥接器：
+        - OneBot v11: notice.poke
+        - KOOK: button click
+        - Telegram: nudge/callback
+        """
+        if not self.config.get("features.nudge_response", True):
+            return
 
-        self.config.setdefault("command.keywords", ["特雷西娅", "特蕾西娅", "Theresia"])
-        self.config.setdefault("command.prefix", "/theresia")
-        self.config.setdefault("voice.default_tag", "")
+        # OneBot v11 戳一戳事件
+        if event.get("post_type") == "notice" and event.get("notice_type") == "poke":
+            session_id = str(event.get("group_id") or event.get("user_id"))
+            logger.info(f"[Echo v2.0] event_bus 捕获到戳一戳 session={session_id}")
 
-        self.config.setdefault("features.sanity_mode", True)
-        self.config.setdefault("features.emotion_detect", True)
-        self.config.setdefault("features.smart_negation", True)
-        self.config.setdefault("features.nudge_response", True)
-        self.config.setdefault("features.smart_voice_pick", True)
+            fake_event = AstrMessageEvent(
+                session_id=session_id,
+                message_str="[戳一戳]",
+                message_obj=None
+            )
 
-        # 深夜护航时间段
-        self.config.setdefault("sanity.night_start", 1)
-        self.config.setdefault("sanity.night_end", 5)
+            async for msg in self.handle_poke(fake_event):
+                yield msg
 
-        # 定时任务
-        self.config.setdefault("schedule.enabled", False)
-        self.config.setdefault("schedule.time", "08:00")
-        self.config.setdefault("schedule.frequency", "daily")
-        self.config.setdefault("schedule.voice_tags", [])
-        self.config.setdefault("schedule.target_sessions", [])
-        self.config.setdefault("schedule.weekday", 1)
+    # ==================== 戳一戳处理 ====================
 
-    def _save_config(self):
-        try:
-            if hasattr(self.config, "save_config"):
-                self.config.save_config()
-        except Exception:
-            pass
-
-    # ==================== 会话状态 ====================
-
-    def _get_session_state(self, session_id):
-        if session_id not in self.session_state:
-            self.session_state[session_id] = {
-                "last_tag": None,
-                "last_voice_path": None,
-                "last_trigger_time": 0,
-            }
-        return self.session_state[session_id]
+    async def handle_poke(self, event):
+        tag = random.choice(["poke", "trust"])
+        rel_path = self.voice_manager.get_voice(tag)
+        if rel_path:
+            async for msg in self.safe_yield_voice(event, rel_path):
+                yield msg
 
     # ==================== 安全发送语音 ====================
 
     async def safe_yield_voice(self, event: AstrMessageEvent, rel_path: str | None):
         if not rel_path:
-            if event.message_str and event.message_str.startswith("/"):
-                yield event.plain_result("特雷西娅似乎没有找到这段语音呢~")
             return
 
         abs_path = (self.plugin_root / rel_path).resolve()
@@ -135,7 +127,7 @@ class TheresiaVoicePlugin(Star):
             yield event.chain_result([Record(file=str(abs_path))])
         except Exception as e:
             import traceback
-            logger.error(f"[Echo v2.0] 发送失败: {e} | session={event.session_id} | path={rel_path}")
+            logger.error(f"[Echo v2.0] 发送失败: {e}")
             logger.error(traceback.format_exc())
 
     # ==================== 情感分析 ====================
@@ -173,63 +165,33 @@ class TheresiaVoicePlugin(Star):
     def pick_voice_tag(self, *, base_tag, sentiment_tag, sentiment_score, is_late_night, session_state):
         candidates = []
 
-        # 深夜护航
         if is_late_night:
             if sentiment_tag in {"comfort", "dont_cry", "fail", "company"}:
                 candidates += [sentiment_tag, "sanity"]
             else:
                 candidates.append("sanity")
 
-        # 情感标签
         if sentiment_tag and sentiment_tag not in candidates:
             candidates.append(sentiment_tag)
 
-        # 默认标签
         if base_tag and base_tag not in candidates:
             candidates.append(base_tag)
 
         if not candidates:
             return None
 
-        # 智能去重（按会话）
         last_tag = session_state["last_tag"]
         if self.config.get("features.smart_voice_pick", True):
             if last_tag in candidates and sentiment_score < 12:
                 candidates = [c for c in candidates if c != last_tag] or candidates
 
-        # 权重选择
         if sentiment_tag and sentiment_tag in candidates and sentiment_score >= 12:
             weights = [3 if c == sentiment_tag else 1 for c in candidates]
             return random.choices(candidates, weights=weights, k=1)[0]
 
         return random.choice(candidates)
 
-    # ==================== raw_event 戳一戳桥接（核心） ====================
-
-    @filter.raw_event
-    async def _raw_event_poke_bridge(self, raw: dict):
-        """
-        兼容所有 AstrBot 版本的戳一戳事件桥接器：
-        - OneBot v11: notice.poke
-        - KOOK: eventType = "message.btn.click"
-        - Telegram: callback_query / nudge
-        """
-
-        # OneBot v11（aiocqhttp）戳一戳事件
-        if raw.get("post_type") == "notice" and raw.get("notice_type") == "poke":
-            session_id = str(raw.get("group_id") or raw.get("user_id"))
-            logger.info(f"[Echo v2.0] raw_event 捕获到 OneBot 戳一戳 session={session_id}")
-
-            fake_event = AstrMessageEvent(
-                session_id=session_id,
-                message_str="[戳一戳]",
-                message_obj=None
-            )
-
-            async for msg in self.handle_poke(fake_event):
-                yield msg
-
-    # ==================== 文本触发（兼容戳一戳文本） ====================
+    # ==================== 文本触发（保留原逻辑） ====================
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
@@ -302,7 +264,6 @@ class TheresiaVoicePlugin(Star):
     # ==================== 按标签发送语音 ====================
 
     async def send_voice_by_tag(self, event: AstrMessageEvent, tag: str | None):
-        """根据标签选择语音并发送"""
         rel_path = self.voice_manager.get_voice(tag or None)
         if not rel_path and tag:
             rel_path = self.voice_manager.get_voice(None)
@@ -378,6 +339,6 @@ class TheresiaVoicePlugin(Star):
             "1. 多会话独立状态\n"
             "2. 情感共鸣：识别累/难过等情绪\n"
             "3. 深夜护航：可配置时间段\n"
-            "4. 信赖触摸：检测戳一戳事件（raw_event 全兼容）\n"
+            "4. 信赖触摸：检测戳一戳事件（event_bus 全兼容）\n"
             "5. 智能语音：避免重复、动态选语音\n"
         )
