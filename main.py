@@ -8,7 +8,7 @@ from pathlib import Path
 
 from astrbot.api.all import *
 from astrbot.api.star import Star, Context, register
-from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.event import EventHandler, AstrMessageEvent
 from astrbot.api.message_components import Record
 from astrbot.api import logger
 
@@ -206,7 +206,7 @@ class TheresiaVoicePlugin(Star):
 
     # ==================== raw_event 戳一戳桥接（核心） ====================
 
-    @filter.raw_event
+    @EventHandler.on_raw_event()
     async def _raw_event_poke_bridge(self, raw: dict):
         """
         兼容所有 AstrBot 版本的戳一戳事件桥接器：
@@ -231,7 +231,7 @@ class TheresiaVoicePlugin(Star):
 
     # ==================== 文本触发（兼容戳一戳文本） ====================
 
-    @filter.event_message_type(filter.EventMessageType.ALL)
+    @EventHandler.on_message()
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True):
             return
@@ -313,7 +313,7 @@ class TheresiaVoicePlugin(Star):
 
     # ==================== 指令 ====================
 
-    @filter.command("theresia")
+    @EventHandler.on_command("theresia")
     async def main_command(self, event: AstrMessageEvent, action: str = None, payload: str = None):
         action = (action or "").lower().strip()
 
