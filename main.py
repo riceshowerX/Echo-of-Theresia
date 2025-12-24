@@ -8,7 +8,7 @@ from pathlib import Path
 
 from astrbot.api.all import *
 from astrbot.api.star import Star, Context, register
-from astrbot.api.event import EventHandler, AstrMessageEvent
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.message_components import Record
 from astrbot.api import logger
 
@@ -204,46 +204,29 @@ class TheresiaVoicePlugin(Star):
 
         return random.choice(candidates)
 
-    # ==================== raw_event 戳一戳桥接（核心） ====================
+    # ==================== 文本戳一戳桥接（方案 A） ====================
 
-    @EventHandler.on_raw_event()
-    async def _raw_event_poke_bridge(self, raw: dict):
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def _text_poke_bridge(self, event: AstrMessageEvent):
         """
-        兼容所有 AstrBot 版本的戳一戳事件桥接器：
-        - OneBot v11: notice.poke
-        - KOOK: eventType = "message.btn.click"
-        - Telegram: callback_query / nudge
+        文本戳一戳桥接（最通用方案）
+        兼容 KOOK / QQ / Telegram / OneBot 文本戳一戳
         """
+        text = (event.message_str or "").lower()
 
-        # OneBot v11（aiocqhttp）戳一戳事件
-        if raw.get("post_type") == "notice" and raw.get("notice_type") == "poke":
-            session_id = str(raw.get("group_id") or raw.get("user_id"))
-            logger.info(f"[Echo v2.0] raw_event 捕获到 OneBot 戳一戳 session={session_id}")
-
-            fake_event = AstrMessageEvent(
-                session_id=session_id,
-                message_str="[戳一戳]",
-                message_obj=None
-            )
-
-            async for msg in self.handle_poke(fake_event):
+        if any(k in text for k in ["[戳一戳]", "戳了戳", "poke"]):
+            async for msg in self.handle_poke(event):
                 yield msg
 
-    # ==================== 文本触发（兼容戳一戳文本） ====================
+    # ==================== 文本触发（名字触发） ====================
 
-    @EventHandler.on_message()
+    @filter.event_message_type(filter.EventMessageType.ALL)
     async def keyword_trigger(self, event: AstrMessageEvent):
         if not self.config.get("enabled", True):
             return
 
         text = (event.message_str or "").strip()
         text_lower = text.lower()
-
-        # 文本戳一戳（KOOK / Telegram / QQ）
-        if "[戳一戳]" in text or "戳了戳" in text or "poke" in text_lower:
-            async for msg in self.handle_poke(event):
-                yield msg
-            return
 
         if not text:
             return
@@ -313,7 +296,7 @@ class TheresiaVoicePlugin(Star):
 
     # ==================== 指令 ====================
 
-    @EventHandler.on_command("theresia")
+    @filter.command("theresia")
     async def main_command(self, event: AstrMessageEvent, action: str = None, payload: str = None):
         action = (action or "").lower().strip()
 
@@ -378,6 +361,6 @@ class TheresiaVoicePlugin(Star):
             "1. 多会话独立状态\n"
             "2. 情感共鸣：识别累/难过等情绪\n"
             "3. 深夜护航：可配置时间段\n"
-            "4. 信赖触摸：检测戳一戳事件（raw_event 全兼容）\n"
+            "4. 信赖触摸：检测戳一戳事件（文本兼容）\n"
             "5. 智能语音：避免重复、动态选语音\n"
         )
