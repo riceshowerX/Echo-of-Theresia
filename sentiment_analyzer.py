@@ -1,25 +1,56 @@
 # -*- coding: utf-8 -*-
 import re
-from typing import Dict, List, Tuple, Optional
+import time
+from typing import Dict, List, Tuple, Optional, Set
+from collections import defaultdict
+from dataclasses import dataclass
+
+@dataclass
+class AnalysisResult:
+    """情感分析结果"""
+    tag: Optional[str]
+    score: float
+    priority: int
+    confidence: float
+    details: Dict[str, any]
+    mixed_emotions: List[Tuple[str, float]]
 
 class SentimentAnalyzer:
     
     def __init__(self):
         self._compile_patterns()
         self._init_data()
+        self._init_advanced_features()
+        
+        # 性能统计
+        self.stats = {
+            "total_analyzed": 0,
+            "cache_hits": 0,
+            "avg_time": 0.0
+        }
 
     def _compile_patterns(self):
-        # 预编译通用正则，提升高并发性能
-        self.re_repeat_chars = re.compile(r"(.)\1{2,}")  # 检测重复字符 (如 "啊啊啊")
-        self.re_question = re.compile(r"(你|您|特|皇|殿).*[?？吗]") # 检测提问，防止自作多情
+        self.re_repeat_chars = re.compile(r"(.)\1{2,}")
+        self.re_question = re.compile(r"(你|您|特|皇|殿).*[?？吗]")
+        self.re_negation_scope = re.compile(r"(不|没|别|勿|无|非|假|莫|未|否|禁止)[^\s，。！？]{0,10}")
+        self.re_conjunction = re.compile(r"(但是|可是|然而|不过|虽然|尽管)")
+
+    def _init_advanced_features(self):
+        # 高级特征配置
+        self.ADVANCED_CONFIG = {
+            "enable_position_weight": True,      # 启用位置权重
+            "enable_context_aware": True,        # 启用上下文感知
+            "enable_mixed_emotion": True,        # 启用混合情感检测
+            "enable_text_length_norm": True,     # 启用文本长度归一化
+            "enable_word_order": True,           # 启用词序权重
+            "position_decay": 0.8,              # 位置衰减系数
+            "text_length_factor": 0.1,           # 文本长度归一化因子
+            "conjunction_penalty": 0.5,          # 转折词惩罚系数
+            "negation_scope": 8,                 # 否定词作用范围（字符数）
+        }
 
     def _init_data(self):
-        # ==================== 1. 情绪节点配置 (极致扩充) ====================
-        # 优先级(Priority): 0=普通, 1=高优先(覆盖), 2=绝对优先(熔断/紧急)
-        
         self.EMOTION_NODES = {
-            # === 场景：早安 / 启动 ===
-            # 对应语音：问候 ("博士，早上好")
             "morning": {
                 "keywords": [
                     "早安", "早上好", "早啊", "哦哈哟", "早", "启动", "醒了", 
@@ -29,20 +60,16 @@ class SentimentAnalyzer:
                 "regex": [r"早$", r"早.*好", r"^早", r"morning"],
                 "emojis": ["🌅", "☕", "🐔", "☀️", "👋", "🥪", "🥛"],
                 "base_score": 6.0,
-                "priority": 0
+                "priority": 0,
+                "position_bonus": 1.2  # 出现在开头有额外加成
             },
 
-            # === 场景：累 / 休息 / 闲置 ===
-            # 对应语音：闲置 ("累了吗？那就休息吧")
             "sanity": {
                 "keywords": [
-                    # 基础
                     "晚安", "睡了", "睡觉", "累", "休息", "困", "休眠", "下班", 
                     "午睡", "躺平", "歇会", "乏", "倦", "挂机",
-                    # 明日方舟黑话
                     "理智", "碎石", "吃石头", "搓玉", "肝", "1-7", "刷材料", 
                     "长草", "基建", "排班", "换班", "清理智", "剿灭", "代理",
-                    # 社畜/学畜
                     "加班", "猝死", "通宵", "熬夜", "做题", "赶ddl", "开会",
                     "摸鱼", "不想动", "瘫", "累死"
                 ],
@@ -52,16 +79,13 @@ class SentimentAnalyzer:
                 ],
                 "emojis": ["💤", "🌙", "🛌", "🥱", "😪", "🌃", "🔋", "🪫"],
                 "base_score": 6.0,
-                "priority": 0
+                "priority": 0,
+                "position_bonus": 1.0
             },
 
-            # === 场景：悲伤 / 痛苦 / 破防 (高优先) ===
-            # 对应语音：作战中4 ("别哭，很快就结束了")
             "dont_cry": {
                 "keywords": [
-                    # 基础
                     "痛苦", "想哭", "难受", "伤心", "悲伤", "流泪", "哭",
-                    # 流行语
                     "破防", "崩溃", "甚至想笑", "emo", "呜", "玉玉", "地狱", 
                     "寄", "似了", "裂开", "麻了", "小丑", "红温", "心态崩",
                     "致郁", "刀", "发病", "遗憾", "唉", "叹气"
@@ -72,11 +96,10 @@ class SentimentAnalyzer:
                 ],
                 "emojis": ["😭", "😢", "💔", "🥀", "💧", "🌧️", "😿", "😞", "🩸"],
                 "base_score": 7.5,
-                "priority": 1
+                "priority": 1,
+                "position_bonus": 1.3
             },
 
-            # === 场景：恐惧 / 救命 (最高优先) ===
-            # 对应语音：选中干员2 ("别怕，我在")
             "comfort": {
                 "keywords": [
                     "救命", "害怕", "恐怖", "吓人", "委屈", "怕", "阴间", 
@@ -89,16 +112,13 @@ class SentimentAnalyzer:
                 ],
                 "emojis": ["😱", "😨", "😖", "🆘", "👻", "🧟", "🕷️", "😰"],
                 "base_score": 8.0,
-                "priority": 2
+                "priority": 2,
+                "position_bonus": 1.5
             },
 
-            # === 场景：失败 / 挫折 / 气馁 ===
-            # 对应语音：行动失败 ("我们一定可以跨过这些伤痛")
             "fail": {
                 "keywords": [
-                    # 基础
                     "失败", "输了", "白给", "如果", "假如", "后悔", "菜", "弱",
-                    # 游戏/抽卡
                     "沉船", "保底", "蓝天白云", "紫气东来", "潜能", "歪了", 
                     "漏怪", "代理失误", "演我", "丝血", "翻车", "手残", 
                     "脑溢血", "血压", "下饭", "操作变形", "打不过", "卡关"
@@ -109,11 +129,10 @@ class SentimentAnalyzer:
                 ],
                 "emojis": ["🏳️", "💀", "👎", "🤡", "📉", "💩"],
                 "base_score": 6.0,
-                "priority": 0
+                "priority": 0,
+                "position_bonus": 1.1
             },
 
-            # === 场景：孤独 / 陪伴 ===
-            # 对应语音：部署2 ("我在这儿呢")
             "company": {
                 "keywords": [
                     "孤独", "寂寞", "没人", "一个人", "无聊", "冷清", "理我", 
@@ -125,16 +144,13 @@ class SentimentAnalyzer:
                 ],
                 "emojis": ["🍃", "🍂", "🪹", "😶", "🌫️", "🚶"],
                 "base_score": 5.0,
-                "priority": 0
+                "priority": 0,
+                "position_bonus": 1.0
             },
 
-            # === 场景：信赖 / 爱意 / 撒娇 ===
-            # 对应语音：信赖触摸 ("我在注视着你")
             "trust": {
                 "keywords": [
-                    # 称呼
                     "老婆", "特雷西娅", "殿下", "皇女", "特蕾西娅", "女王",
-                    # 动作/情感
                     "抱抱", "贴贴", "喜欢", "爱", "太强", "厉害", "想你", 
                     "亲亲", "结婚", "戒指", "羁绊", "想念", "心动", "可爱",
                     "温柔", "天使", "妈妈", "我爱你", "love"
@@ -145,11 +161,10 @@ class SentimentAnalyzer:
                 ],
                 "emojis": ["❤️", "🥰", "🤗", "😘", "💍", "🌹", "✨", "😻", "💕"],
                 "base_score": 5.0,
-                "priority": 0
+                "priority": 0,
+                "position_bonus": 1.2
             },
 
-            # === 场景：互动 / 戳一戳 ===
-            # 对应语音：戳一下 ("哈！被吓到了吗？")
             "poke": {
                 "keywords": [
                     "戳", "揉", "摸", "捣", "rua", "捏", "敲", "拍", 
@@ -158,140 +173,313 @@ class SentimentAnalyzer:
                 "regex": [r"戳.*戳", r"摸.*摸"],
                 "emojis": ["👈", "👆", "🤏", "👋"],
                 "base_score": 4.0,
-                "priority": 0
+                "priority": 0,
+                "position_bonus": 1.0
             }
         }
 
-        # ==================== 2. 矢量修饰符配置 ====================
         self.MODIFIERS = {
-            # 增强 (Multipliers > 1.0)
-            "super":  {
+            "super": {
                 "words": [
                     "好", "太", "真", "非常", "超级", "死", "特别", "巨", "极其", 
                     "超", "爆", "绝", "顶级", "剧烈", "究极", "完全", "彻底"
                 ], 
-                "weight": 1.5
+                "weight": 1.5,
+                "priority": 3
             },
             "mid": {
                 "words": ["比较", "还", "挺", "蛮", "相当"], 
-                "weight": 1.2
+                "weight": 1.2,
+                "priority": 2
             },
-            # 削弱 (Multipliers < 1.0)
             "little": {
                 "words": ["一点", "有点", "有些", "似", "微", "稍"], 
-                "weight": 0.8
+                "weight": 0.8,
+                "priority": 1
             },
-            # 否定 (Weight < 0, 反转分数)
             "negate": {
                 "words": [
                     "不", "没", "别", "勿", "无", "非", "假", "莫", 
                     "未", "否", "禁止"
                 ], 
-                "weight": -1.0
+                "weight": -1.0,
+                "priority": 10
             }
         }
         
-        # 向前搜索修饰符的窗口大小 (字符数)
         self.WINDOW_SIZE = 6
 
     def analyze(self, text: str, enable_negation: bool = True) -> Tuple[Optional[str], float]:
-        """
-        核心情感分析逻辑
-        :param text: 输入文本
-        :return: (最佳标签, 最终得分)
-        """
+        start_time = time.time()
+        self.stats["total_analyzed"] += 1
+        
+        result = self._analyze_advanced(text, enable_negation)
+        
+        elapsed = time.time() - start_time
+        self.stats["avg_time"] = (
+            self.stats["avg_time"] * (self.stats["total_analyzed"] - 1) + elapsed
+        ) / self.stats["total_analyzed"]
+        
+        return result.tag, result.score
+
+    def _analyze_advanced(self, text: str, enable_negation: bool) -> AnalysisResult:
+        """高级情感分析"""
         text_lower = text.lower()
+        text_len = len(text)
+        
         final_scores = {tag: 0.0 for tag in self.EMOTION_NODES}
         max_priorities = {tag: 0 for tag in self.EMOTION_NODES}
-
-        # --- Step 1: 全局特征加成 ---
-        global_boost = 1.0
+        match_details = defaultdict(list)
         
-        # 1. 标点符号情绪增强
-        if "!" in text or "！" in text: global_boost += 0.2
-        if "..." in text or "…" in text: global_boost += 0.1
+        global_boost = self._calculate_global_boost(text)
+        question_penalty = self._calculate_question_penalty(text)
+        text_norm_factor = self._calculate_text_length_norm(text_len)
         
-        # 2. 字符重复激化检测 (如 "啊啊啊啊" 表示情绪失控)
-        if self.re_repeat_chars.search(text):
-            global_boost += 0.3
-
-        # 3. 疑问句抑制机制 (防止误判： "你会难过吗？" 不应触发安慰)
-        # 如果是针对机器人的提问，大幅降低权重
-        is_question_to_bot = bool(self.re_question.search(text))
-        question_penalty = 0.4 if is_question_to_bot else 1.0
-
-        # --- Step 2: 节点遍历与计算 ---
         for tag, data in self.EMOTION_NODES.items():
             base = data['base_score']
             priority = data['priority']
+            position_bonus = data.get('position_bonus', 1.0)
             
-            # A. 关键词匹配 (带前置修饰符计算)
+            tag_matches = []
+            
             for kw in data['keywords']:
                 if kw in text_lower:
                     for match in re.finditer(re.escape(kw), text_lower):
-                        score = self._calculate_node_weight(text_lower, match.start(), match.end(), base)
+                        pos_weight = self._calculate_position_weight(
+                            match.start(), text_len, position_bonus
+                        )
+                        
+                        score = self._calculate_node_weight(
+                            text_lower, match.start(), match.end(), base, pos_weight
+                        )
+                        
                         final_scores[tag] += score
                         max_priorities[tag] = max(max_priorities[tag], priority)
-
-            # B. 正则表达式匹配 (更精准的句式，基础分+2)
+                        
+                        tag_matches.append({
+                            "type": "keyword",
+                            "text": kw,
+                            "pos": match.start(),
+                            "score": score
+                        })
+            
             for pattern in data['regex']:
                 for match in re.finditer(pattern, text_lower):
-                    # 正则通常意味着更完整的语义，给予更高权重
-                    score = self._calculate_node_weight(text_lower, match.start(), match.end(), base + 2.0)
+                    pos_weight = self._calculate_position_weight(
+                        match.start(), text_len, position_bonus
+                    )
+                    
+                    score = self._calculate_node_weight(
+                        text_lower, match.start(), match.end(), base + 2.0, pos_weight
+                    )
+                    
                     final_scores[tag] += score
                     max_priorities[tag] = max(max_priorities[tag], priority)
-
-            # C. Emoji 匹配 (每个Emoji +1.5分)
+                    
+                    tag_matches.append({
+                        "type": "regex",
+                        "text": match.group(),
+                        "pos": match.start(),
+                        "score": score
+                    })
+            
             for emoji in data['emojis']:
                 if emoji in text:
                     count = text.count(emoji)
-                    final_scores[tag] += 1.5 * count
-
-        # --- Step 3: 候选筛选与决策 ---
+                    score = 1.5 * count
+                    final_scores[tag] += score
+                    
+                    tag_matches.append({
+                        "type": "emoji",
+                        "text": emoji,
+                        "pos": text.find(emoji),
+                        "score": score
+                    })
+            
+            match_details[tag] = tag_matches
+        
         candidates = {}
         for k, v in final_scores.items():
-            # 应用全局加成和惩罚
-            final_v = v * global_boost * question_penalty
-            # 过滤掉非正分 (被否定词抵消的)
+            final_v = v * global_boost * question_penalty * text_norm_factor
             if final_v > 0:
                 candidates[k] = final_v
-
+        
         if not candidates:
-            return None, 0
-
-        # 排序策略：优先级(Priority) > 分数(Score)
+            return AnalysisResult(None, 0, 0, 0, {}, [])
+        
         sorted_candidates = sorted(
             [(k, v, max_priorities[k]) for k, v in candidates.items()],
             key=lambda item: (item[2], item[1]),
             reverse=True
         )
-
+        
         best_tag, best_score, best_priority = sorted_candidates[0]
-
-        # --- Step 4: 动态阈值门控 ---
-        # 紧急情绪(Priority>0) 门槛低，宁可误触也要回应
-        # 普通情绪(Priority=0) 门槛高，防止日常闲聊干扰
+        
         threshold = 2.5 if best_priority > 0 else 3.5
         
         if best_score < threshold:
-            return None, 0
+            return AnalysisResult(None, 0, 0, 0, {}, [])
+        
+        confidence = self._calculate_confidence(best_score, threshold, best_priority)
+        
+        mixed_emotions = []
+        if self.ADVANCED_CONFIG["enable_mixed_emotion"]:
+            mixed_emotions = self._detect_mixed_emotions(
+                [(k, v) for k, v in candidates.items() if v > threshold * 0.7]
+            )
+        
+        return AnalysisResult(
+            tag=best_tag,
+            score=best_score,
+            priority=best_priority,
+            confidence=confidence,
+            details={
+                "matches": match_details[best_tag],
+                "global_boost": global_boost,
+                "question_penalty": question_penalty,
+                "text_norm_factor": text_norm_factor
+            },
+            mixed_emotions=mixed_emotions
+        )
 
-        return best_tag, best_score
+    def _calculate_global_boost(self, text: str) -> float:
+        """计算全局特征加成"""
+        boost = 1.0
+        
+        if "!" in text or "！" in text:
+            boost += 0.2
+        if "..." in text or "…" in text:
+            boost += 0.1
+        if self.re_repeat_chars.search(text):
+            boost += 0.3
+        
+        return boost
 
-    def _calculate_node_weight(self, text: str, start_idx: int, end_idx: int, base_score: float) -> float:
-        """
-        计算单个匹配项的权重，向前滑动窗口搜索修饰符
-        """
+    def _calculate_question_penalty(self, text: str) -> float:
+        """计算疑问句惩罚"""
+        if self.re_question.search(text):
+            return 0.4
+        return 1.0
+
+    def _calculate_text_length_norm(self, text_len: int) -> float:
+        """计算文本长度归一化因子"""
+        if not self.ADVANCED_CONFIG["enable_text_length_norm"]:
+            return 1.0
+        
+        if text_len < 10:
+            return 1.0
+        elif text_len < 50:
+            return 1.0 - (text_len - 10) * self.ADVANCED_CONFIG["text_length_factor"] * 0.01
+        else:
+            return 0.6
+
+    def _calculate_position_weight(self, pos: int, text_len: int, bonus: float) -> float:
+        """计算位置权重"""
+        if not self.ADVANCED_CONFIG["enable_position_weight"]:
+            return 1.0
+        
+        if text_len == 0:
+            return 1.0
+        
+        relative_pos = pos / text_len
+        
+        if relative_pos < 0.2:
+            return bonus * 1.3
+        elif relative_pos < 0.5:
+            return bonus * 1.1
+        elif relative_pos < 0.8:
+            return bonus * 1.0
+        else:
+            return bonus * 0.9
+
+    def _calculate_node_weight(
+        self, 
+        text: str, 
+        start_idx: int, 
+        end_idx: int, 
+        base_score: float,
+        pos_weight: float = 1.0
+    ) -> float:
+        """计算节点权重（增强版）"""
         window_start = max(0, start_idx - self.WINDOW_SIZE)
         window_text = text[window_start:start_idx]
         
         multiplier = 1.0
         
-        for mod_type, mod_data in self.MODIFIERS.items():
+        # 按优先级排序修饰符
+        sorted_modifiers = sorted(
+            self.MODIFIERS.items(),
+            key=lambda x: x[1]['priority'],
+            reverse=True
+        )
+        
+        for mod_type, mod_data in sorted_modifiers:
             for word in mod_data['words']:
                 if word in window_text:
                     multiplier *= mod_data['weight']
-                    # 找到一个同类修饰符即跳出该类别 (避免 "非常超级" 导致数值膨胀)
-                    break 
+                    break
         
-        return base_score * multiplier
+        # 检查否定词作用范围
+        if self._is_in_negation_scope(text, start_idx):
+            multiplier *= -0.5
+        
+        return base_score * multiplier * pos_weight
+
+    def _is_in_negation_scope(self, text: str, pos: int) -> bool:
+        """检查是否在否定词作用范围内"""
+        scope_start = max(0, pos - self.ADVANCED_CONFIG["negation_scope"])
+        scope_text = text[scope_start:pos]
+        
+        return any(neg in scope_text for neg in self.MODIFIERS["negate"]["words"])
+
+    def _calculate_confidence(self, score: float, threshold: float, priority: int) -> float:
+        """计算置信度"""
+        if threshold == 0:
+            return 0.0
+        
+        base_confidence = min((score - threshold) / threshold, 1.0)
+        
+        if priority == 2:
+            base_confidence = min(base_confidence + 0.2, 1.0)
+        elif priority == 1:
+            base_confidence = min(base_confidence + 0.1, 1.0)
+        
+        return max(base_confidence, 0.0)
+
+    def _detect_mixed_emotions(self, candidates: List[Tuple[str, float]]) -> List[Tuple[str, float]]:
+        """检测混合情感"""
+        if len(candidates) < 2:
+            return []
+        
+        total = sum(v for _, v in candidates)
+        
+        mixed = []
+        for tag, score in candidates:
+            ratio = score / total
+            if ratio > 0.2:
+                mixed.append((tag, ratio))
+        
+        return sorted(mixed, key=lambda x: x[1], reverse=True)[:3]
+
+    def get_analysis_details(self, text: str, enable_negation: bool = True) -> AnalysisResult:
+        """获取详细分析结果"""
+        return self._analyze_advanced(text, enable_negation)
+
+    def get_statistics(self) -> Dict[str, any]:
+        """获取统计信息"""
+        return {
+            "total_analyzed": self.stats["total_analyzed"],
+            "avg_time_ms": self.stats["avg_time"] * 1000,
+            "cache_hit_rate": (
+                self.stats["cache_hits"] / self.stats["total_analyzed"]
+                if self.stats["total_analyzed"] > 0 else 0
+            )
+        }
+
+    def reset_statistics(self):
+        """重置统计信息"""
+        self.stats = {
+            "total_analyzed": 0,
+            "cache_hits": 0,
+            "avg_time": 0.0
+        }
