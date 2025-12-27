@@ -16,13 +16,13 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import Aioc
 
 from .voice_manager import VoiceManager
 from .scheduler import VoiceScheduler
-from .sentiment_analyzer import SentimentAnalyzer, AnalysisResult  # 确保导入了 AnalysisResult
+from .sentiment_analyzer import SentimentAnalyzer, AnalysisResult
 
 @register(
     "echo_of_theresia",
     "riceshowerX",
-    "3.0.0",
-    "明日方舟特雷西娅角色语音插件（v3.0 情感引擎适配版）"
+    "3.0.1",
+    "明日方舟特雷西娅角色语音插件（v3.0.1 修复版）"
 )
 class TheresiaVoicePlugin(Star):
 
@@ -33,7 +33,7 @@ class TheresiaVoicePlugin(Star):
 
         self.plugin_root = Path(__file__).parent.resolve()
 
-        # === 核心状态管理 (线程安全升级) ===
+        # === 核心状态管理 (线程安全) ===
         self.session_state: Dict[str, Dict[str, Any]] = {}
         self.state_lock = threading.Lock()
         self.MAX_CACHE_SIZE = 500
@@ -48,7 +48,7 @@ class TheresiaVoicePlugin(Star):
     async def on_load(self):
         if self.config.get("enabled", True):
             asyncio.create_task(self.scheduler.start())
-        logger.info("[Echo of Theresia] 核心逻辑已装载 (Sentiment Engine v3.1 Linked)")
+        logger.info("[Echo of Theresia] 核心逻辑已装载 (v3.0.1 Hotfix)")
 
     async def on_unload(self):
         await self.scheduler.stop()
@@ -66,8 +66,8 @@ class TheresiaVoicePlugin(Star):
         self.config.setdefault("features.emotion_detect", True)
         
         # 阈值设置
-        self.config.setdefault("params.base_cooldown", 15)      # 基础CD
-        self.config.setdefault("params.mood_duration", 120)     # 情绪持续时间(秒) - 配合v3.1引擎延长
+        self.config.setdefault("params.base_cooldown", 15)      
+        self.config.setdefault("params.mood_duration", 120)     
 
         self.config.setdefault("sanity.night_start", 1)
         self.config.setdefault("sanity.night_end", 6)
@@ -90,7 +90,6 @@ class TheresiaVoicePlugin(Star):
             now = time.time()
             
             if session_id not in self.session_state:
-                # 简单的随机清理，避免排序带来的性能损耗
                 if len(self.session_state) >= self.MAX_CACHE_SIZE:
                     keys_to_remove = list(self.session_state.keys())[:50]
                     for k in keys_to_remove:
@@ -128,91 +127,72 @@ class TheresiaVoicePlugin(Star):
         except Exception as e:
             logger.error(f"[Echo] 发送失败: {e} | session={event.session_id}")
 
-    # ==================== 核心决策算法 (v3.0 升级版) ====================
+    # ==================== 核心决策算法 ====================
 
-    def make_decision(self, *, base_tag: str, analysis: AnalysisResult, is_late_night: bool, session_state: dict) -> str:
+    def make_decision(self, *, base_tag: str, analysis: AnalysisResult, is_late_night: bool, session_state: dict) -> tuple[Optional[str], dict]:
         """
         基于 v3.1 情感引擎结果的决策逻辑
         """
         now = time.time()
         candidates = []
         
-        # 1. 提取分析结果
         current_tag = analysis.tag
         current_score = analysis.score
         
-        # 2. 情绪惯性 (Plugin层面的短期惯性)
         mood_tag = session_state.get("mood_tag")
         mood_expiry = session_state.get("mood_expiry", 0)
         has_strong_mood = (mood_tag is not None) and (now < mood_expiry)
 
-        # 3. 候选池构建
-        # A. 当前识别到的情绪
+        # 候选池构建
         if current_tag:
             candidates.append(current_tag)
-            # 如果强度很高，加入双倍权重
             if analysis.intensity in ["severe", "extreme"]:
                 candidates.append(current_tag)
         
-        # B. 混合情绪 (v3.1 新特性)
         if analysis.mixed_emotions:
             for mix_tag, _ in analysis.mixed_emotions:
                 candidates.append(mix_tag)
 
-        # C. 惯性情绪 (如果没有被当前强情绪覆盖)
         if has_strong_mood:
-            # 只有当当前情绪不是强烈的反向情绪时，才保留惯性
-            # (简化逻辑：只要当前强度不是 extreme，就混入惯性)
             if analysis.intensity != "extreme":
                 candidates.append(mood_tag)
 
-        # D. 环境因素 (深夜模式)
         if is_late_night:
-            # 深夜适合：安抚、晚安、陪伴
             if current_tag in {"comfort", "dont_cry", "company"}:
-                candidates.append(current_tag) # 加重当前
+                candidates.append(current_tag)
             else:
-                candidates.append("sanity") # 默认晚安
+                candidates.append("sanity")
 
-        # E. 默认Tag
         if base_tag:
             candidates.append(base_tag)
 
         # 去重
         candidates = list(set(candidates))
         if not candidates:
-            return None
+            # === [修复点 1] ===
+            # 这里必须返回 tuple，否则解包会报错 (TypeError)
+            return None, {}
 
-        # 4. 动态权重计算
+        # 动态权重计算
         weights = []
         for tag in candidates:
             w = 1.0
-            
-            # 命中当前识别
             if tag == current_tag:
-                w += current_score * 0.8  # 利用 v3.1 的精准分数
-            
-            # 命中惯性
+                w += current_score * 0.8
             if tag == mood_tag and has_strong_mood:
                 w += 2.5
-            
-            # 避免复读机
             if tag == session_state["last_tag"]:
                 w *= 0.05
-            
             weights.append(w)
 
         final_tag = random.choices(candidates, weights=weights, k=1)[0]
         
-        # 5. 更新状态 (返回需要更新的字段)
+        # 更新状态
         updates = {}
-        
-        # 只有 "moderate" 以上的情绪才值得被记住
         if current_tag and analysis.intensity in ["moderate", "severe", "extreme"]:
             updates["mood_tag"] = current_tag
             updates["mood_expiry"] = now + self.config.get("params.mood_duration", 120)
         
-        # 如果是晚安，清除情绪
         if final_tag == "sanity":
             updates["mood_expiry"] = 0
             
@@ -239,8 +219,6 @@ class TheresiaVoicePlugin(Star):
             platform_meta=event.platform_meta
         )
         
-        # 戳一戳也尝试走一下情感分析(为了获取用户画像)，但强制 tag 为 poke
-        # 这样即使是戳一戳，也能让 SentimentAnalyzer 记住用户活跃了
         self.analyzer.analyze("[戳一戳]", user_id=fake_event.session_id)
         
         rel_path = self.voice_manager.get_voice("poke") or self.voice_manager.get_voice(None)
@@ -258,35 +236,33 @@ class TheresiaVoicePlugin(Star):
         if not text: return
         text_lower = text.lower()
 
-        # 过滤指令
-        if text_lower.startswith(self.config.get("command.prefix", "/theresia").lower()): return
+        # === [修复点 2] ===
+        # 增强指令过滤，同时支持 / 和 ／
+        prefix = self.config.get("command.prefix", "/theresia").lower()
+        if text_lower.startswith(prefix) or text_lower.startswith(prefix.replace("/", "／")): 
+            return
 
         # 关键词检测
         keywords = [str(k).lower() for k in self.config.get("command.keywords", [])]
         if not any(k in text_lower for k in keywords):
             return
 
-        # === 获取会话状态 ===
         state = self._get_session_state(event.session_id)
         now = time.time()
         last_time = state["last_trigger"]
 
-        # === 情感分析 (v3.1 核心调用) ===
-        # 使用 get_analysis_details 获取完整对象，并传入 user_id 用于上下文记忆
-        analysis_result = AnalysisResult(None, 0, 0, 0, "mild", {}, [], 0) # 默认空
-        
+        # 情感分析
+        analysis_result = AnalysisResult(None, 0, 0, 0, "mild", {}, [], 0)
         if self.config.get("features.emotion_detect", True):
             analysis_result = self.analyzer.get_analysis_details(
                 text, 
-                user_id=event.session_id # 关键：传入 ID 激活上下文记忆
+                user_id=event.session_id
             )
 
-        # === 自适应冷却 (ACD v2) ===
+        # 自适应冷却
         base_cd = self.config.get("params.base_cooldown", 15)
-        
-        # 利用 v3.1 的 intensity 属性
         if analysis_result.intensity == "extreme":
-            actual_cd = 0 # 极端情绪无视冷却
+            actual_cd = 0
         elif analysis_result.intensity == "severe":
             actual_cd = 3
         elif analysis_result.intensity == "moderate":
@@ -297,7 +273,7 @@ class TheresiaVoicePlugin(Star):
         if now - last_time < actual_cd:
             return 
 
-        # === 决策 ===
+        # 决策
         hour = datetime.datetime.now().hour
         night_start = int(self.config.get("sanity.night_start", 1))
         night_end = int(self.config.get("sanity.night_end", 5))
@@ -310,7 +286,10 @@ class TheresiaVoicePlugin(Star):
             session_state=state
         )
 
-        # 更新状态
+        # 如果没有合适的tag（且没有默认语音），则不回复，防止发送随机语音造成的困惑
+        # 但如果设定了 default_tag 或者 VoiceManager 能兜底，此处 final_tag 应该不为 None
+        # 如果 VoiceManager.get_voice(None) 返回随机语音，这里会执行
+        
         state_updates["last_trigger"] = now
         state_updates["last_tag"] = final_tag
         self._update_session_state(event.session_id, state_updates)
@@ -321,7 +300,6 @@ class TheresiaVoicePlugin(Star):
     async def send_voice_by_tag(self, event: AstrMessageEvent, tag: str | None):
         rel_path = self.voice_manager.get_voice(tag or None)
         if not rel_path and tag:
-            # 降级策略
             rel_path = self.voice_manager.get_voice(None)
 
         if rel_path:
@@ -335,7 +313,7 @@ class TheresiaVoicePlugin(Star):
         action = (action or "").lower().strip()
 
         if not action:
-            yield event.plain_result("Echo of Theresia v3.0 (Sentiment v3.1) 已就绪~\n发送 /theresia help 查看指令。")
+            yield event.plain_result("Echo of Theresia v3.0.1 (Fix) 已就绪~\n发送 /theresia help 查看指令。")
             return
 
         if action == "help":
@@ -359,7 +337,6 @@ class TheresiaVoicePlugin(Star):
                 yield msg
 
         elif action == "analyze":
-            # 调试指令：查看 v3.1 引擎对当前文本的分析结果
             if not payload:
                 yield event.plain_result("请在指令后输入要分析的文本。")
                 return
@@ -369,15 +346,14 @@ class TheresiaVoicePlugin(Star):
                 f"Score: {res.score:.2f}\n"
                 f"Intensity: {res.intensity}\n"
                 f"Mixed: {res.mixed_emotions}\n"
-                f"Context Influence: {res.context_influence:.2f}"
+                f"Context: {res.context_influence:.2f}"
             )
             yield event.plain_result(info)
 
         elif action == "reset_context":
-            # 清除当前用户的上下文
             if event.session_id in self.analyzer.context_memory:
                 del self.analyzer.context_memory[event.session_id]
-                self.analyzer._save_context_async(event.session_id) # 强制保存
+                self.analyzer._save_context_async(event.session_id)
             yield event.plain_result("上下文记忆已重置。")
 
         elif action == "tags":
@@ -392,14 +368,11 @@ class TheresiaVoicePlugin(Star):
 
     def _help_text(self):
         return (
-            "【Echo of Theresia v3.0】\n"
+            "【Echo of Theresia v3.0.1】\n"
             "/theresia help\n"
             "/theresia enable/disable\n"
             "/theresia voice [标签]\n"
-            "/theresia analyze [文本] (调试情感)\n"
-            "/theresia reset_context (重置记忆)\n"
-            "/theresia tags\n"
-            "特性：\n"
-            "• v3.1 情感引擎：双重否定/反问句/上下文感知\n"
-            "• 智能响应：根据情绪强度动态调整冷却\n"
+            "/theresia analyze [文本]\n"
+            "/theresia reset_context\n"
+            "/theresia tags"
         )
