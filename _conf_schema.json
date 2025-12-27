@@ -3,107 +3,103 @@
     "type": "bool",
     "default": true,
     "label": "插件总开关",
-    "description": "是否启用特雷西娅语音插件的所有功能"
+    "description": "是否启用 Echo of Theresia 的所有功能"
   },
   "command.prefix": {
     "type": "string",
     "default": "/theresia",
     "label": "指令前缀",
-    "description": "调用插件的主指令前缀，例如 /theresia"
+    "description": "调用插件的主指令前缀"
   },
   "command.keywords": {
     "type": "list",
     "default": [
       "特雷西娅",
       "特蕾西娅",
-      "Theresia"
+      "Theresia",
+      "殿下",
+      "皇女"
     ],
     "label": "对话触发词",
-    "description": "当消息包含这些词时，自动触发特雷西娅的语音回复"
+    "description": "当消息包含这些词时，激活语音回复逻辑"
   },
   "voice.default_tag": {
     "type": "string",
     "default": "",
     "label": "默认语音标签",
-    "description": "关键词触发时优先查找的语音标签（留空则完全随机）"
+    "description": "无特定情绪触发时，优先查找的语音标签（留空则根据时间段智能选择）"
   },
   "features.sanity_mode": {
     "type": "bool",
     "default": true,
     "label": "理智护航 (深夜模式)",
-    "description": "开启后，在设定的深夜时段与特雷西娅互动时，会优先回复安抚/休息类语音。"
+    "description": "开启后，在深夜时段（如凌晨）会强制优先回复安抚/晚安类语音，拒绝高亢奋回复。"
   },
   "sanity.night_start": {
     "type": "int",
     "default": 1,
     "label": "深夜开始时间 (小时)",
-    "description": "理智护航的开始小时（0-23），例如 1 表示从 01:00 开始。"
+    "description": "24小时制，例如 1 表示 01:00 开始进入深夜模式。"
   },
   "sanity.night_end": {
     "type": "int",
-    "default": 5,
+    "default": 6,
     "label": "深夜结束时间 (小时)",
-    "description": "理智护航的结束小时（0-23，不含此小时），例如 5 表示到 05:00 结束。"
+    "description": "24小时制，例如 6 表示 06:00 结束深夜模式。"
   },
   "features.emotion_detect": {
     "type": "bool",
     "default": true,
-    "label": "源石技艺共鸣 (情感检测)",
-    "description": "开启后，当检测到“累/难过/痛苦”等负面词汇时，优先回复安慰类语音。"
+    "label": "源石技艺共鸣 (情感引擎 v3.1)",
+    "description": "启用高级情感分析。能识别悲伤、焦虑、快乐等15种情绪，并根据情绪强度调整回复策略。"
   },
   "features.smart_negation": {
     "type": "bool",
     "default": true,
-    "label": "智能否定检测",
-    "description": "开启后，说「不累」「没难过」等否定句将不会误触发安慰语音。"
+    "label": "高维语义理解",
+    "description": "开启后，支持识别双重否定（如“不得不”）、反问句（如“难道不...”）以及反模式（如“笑死”不判为死亡）。"
   },
   "features.mood_inertia": {
     "type": "bool",
     "default": true,
-    "label": "情感惯性 (EI)",
-    "description": "开启后，特雷西娅会记住你的强烈情绪（如悲伤），并在短时间内保持安慰语气。"
-  },
-  "features.smart_voice_pick": {
-    "type": "bool",
-    "default": true,
-    "label": "智能选词 & 防重复",
-    "description": "开启后，会根据使用频率动态降低重复语音的权重，防止复读机。"
+    "label": "情感惯性 (Context Memory)",
+    "description": "开启后，特雷西娅会记住上下文。例如你说过“难过”，接下来的几分钟内她都会保持温柔的安慰语气。"
   },
   "features.nudge_response": {
     "type": "bool",
     "default": true,
     "label": "信赖触摸 (戳一戳)",
-    "description": "开启后，戳一戳机器人头像时会触发互动/信赖语音。"
+    "description": "开启后，戳一戳机器人头像会触发 Poke 专属语音和互动逻辑。"
   },
   "params.base_cooldown": {
     "type": "int",
     "default": 15,
     "label": "基础冷却时间 (秒)",
-    "description": "普通对话后的冷却时间，防止刷屏。"
+    "description": "普通对话后的冷却时间。注意：如果检测到极端情绪（如崩溃/狂喜），系统会自动忽略此冷却。"
   },
   "params.high_emotion_cd": {
     "type": "int",
-    "default": 5,
+    "default": 3,
     "label": "紧急回应冷却 (秒)",
-    "description": "当检测到高优先级情绪（如救命、痛苦）时，冷却时间缩短为此值，以便及时回应。"
+    "description": "当情感引擎检测到 Intensity='severe' 或 'extreme' 时，使用的极短冷却时间。"
   },
   "params.mood_duration": {
     "type": "int",
-    "default": 60,
+    "default": 120,
     "label": "情绪记忆时长 (秒)",
-    "description": "情感惯性的持续时间。"
+    "description": "上下文记忆的保持时间。建议设为 120-300 秒，以获得最佳的连续对话体验。"
   },
   "schedule.enabled": {
     "type": "bool",
     "default": false,
-    "label": "启用定时发送",
-    "description": "开启后将在指定时间向目标会话发送语音"
+    "label": "启用拟人化定时",
+    "description": "开启后将在指定时间主动向目标发送语音，并自动注入上下文状态。"
   },
   "schedule.time": {
     "type": "string",
     "default": "08:00",
     "label": "触发时间",
-    "description": "触发时间，格式为 HH:MM (24小时制)。"
+    "description": "触发时间，格式为 HH:MM。"
   },
   "schedule.frequency": {
     "type": "string",
@@ -115,24 +111,24 @@
       "once"
     ],
     "label": "发送频率",
-    "description": "daily=每天, weekly=每周, hourly=每小时, once=仅发送一次"
+    "description": "发送周期。daily=每天, weekly=每周..."
   },
   "schedule.weekday": {
     "type": "int",
     "default": 1,
     "label": "每周发送日",
-    "description": "仅在 weekly 模式下生效：1=周一, 2=周二, ... , 7=周日。"
+    "description": "仅 weekly 模式生效：1=周一 ... 7=周日。"
   },
   "schedule.voice_tags": {
     "type": "list",
     "default": [],
     "label": "定时语音标签",
-    "description": "定时任务发送的语音类型（例如：morning、sanity）。留空则根据时间段自动注入上下文。"
+    "description": "指定发送的语音类型。留空则启用“智能时间段判定”（早安/午休/晚安自动切换）。"
   },
   "schedule.target_sessions": {
     "type": "list",
     "default": [],
     "label": "目标会话ID列表",
-    "description": "将接收定时语音的会话ID列表。建议使用 /theresia set_target 指令自动添加。"
+    "description": "接收列表。建议使用 /theresia set_target 指令添加，不要手动修改此项。"
   }
 }

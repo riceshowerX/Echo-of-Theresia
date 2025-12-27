@@ -22,7 +22,7 @@ class VoiceScheduler:
         # 记录发送状态: { session_id: last_sent_key }
         self.session_sent_keys: Dict[str, str] = {}
         
-        # 宽容窗口 (秒): 错过时间点多久内允许补发
+        # 宽容窗口 (秒): 错过时间点多久内允许补发 (30分钟)
         self.GRACE_PERIOD = 1800 
         
         self._last_config_signature = ""
@@ -33,7 +33,7 @@ class VoiceScheduler:
         if self.running: return
         self.running = True
         self.task = asyncio.create_task(self._loop())
-        logger.info("[Echo Scheduler v3.0] 拟人化调度服务已挂载")
+        logger.info("[Echo Scheduler v3.1] 智能调度服务已挂载 (Active Context Link)")
 
     async def stop(self):
         self.running = False
@@ -44,7 +44,23 @@ class VoiceScheduler:
             except asyncio.CancelledError:
                 pass
             self.task = None
-        logger.info("[Echo Scheduler v3.0] 服务已卸载")
+        logger.info("[Echo Scheduler v3.1] 服务已卸载")
+        
+    async def add_target(self, session_id: str):
+        """动态添加目标 (供指令调用)"""
+        targets = self.plugin.config.get("schedule.target_sessions", [])
+        if session_id not in targets:
+            targets.append(session_id)
+            self.plugin.config["schedule.target_sessions"] = targets
+            self.plugin._save_config()
+            
+    async def remove_target(self, session_id: str):
+        """动态移除目标"""
+        targets = self.plugin.config.get("schedule.target_sessions", [])
+        if session_id in targets:
+            targets.remove(session_id)
+            self.plugin.config["schedule.target_sessions"] = targets
+            self.plugin._save_config()
 
     # ==================== 核心循环 ====================
 
@@ -61,7 +77,6 @@ class VoiceScheduler:
                     continue
 
                 # 2. 计算触发状态
-                # 返回: (是否触发, 触发类型key, 是否是补发)
                 should_trigger, trigger_key, is_compensation = self._check_trigger_condition()
 
                 if should_trigger:
@@ -74,8 +89,6 @@ class VoiceScheduler:
                     # 等待一会防止重复判定
                     await asyncio.sleep(5)
                 else:
-                    # 没到时间，智能休眠
-                    # 这里不再 sleep(distance)，因为要保持一定的响应频率以检测配置变更
                     await asyncio.sleep(5)
 
             except asyncio.CancelledError:
@@ -87,27 +100,18 @@ class VoiceScheduler:
     # ==================== 触发判定逻辑 ====================
 
     def _check_trigger_condition(self) -> (bool, str, bool):
-        """
-        判断当前是否应该触发。
-        包含算法：断点补偿检测
-        """
         freq = self.plugin.config.get("schedule.frequency", "daily").lower()
         now = datetime.datetime.now()
 
-        # 1. 构造当前的 Time Key
+        # 1. 构造 Time Key
         trigger_key = self._generate_time_key(freq, now)
-        if not trigger_key:
-            return False, "", False
+        if not trigger_key: return False, "", False
 
-        # 2. 解析目标时间 (用于计算宽容度)
+        # 2. 计算宽容度
         target_dt = self._get_target_datetime(freq, now)
         delta = (now - target_dt).total_seconds()
 
         # 3. 判定窗口
-        # 情况A: 正好在时间点附近 (0 <= delta < 60) -> 正常触发
-        # 情况B: 错过了时间点，但在宽容期内 (60 <= delta < GRACE_PERIOD) -> 补偿触发
-        # 情况C: 还没到 (<0) 或 错过太久 (>GRACE_PERIOD) -> 不触发
-        
         is_compensation = False
         if 0 <= delta < 60:
             pass # 正常
@@ -116,31 +120,21 @@ class VoiceScheduler:
         else:
             return False, "", False
 
-        # 4. 检查是否已经发过 (全局检查，具体每个 Session 还会复查)
-        # 这里只要有一个目标没发过这个 Key，就应该触发流程
+        # 4. 检查是否已经发过
         targets = self.plugin.config.get("schedule.target_sessions", [])
-        if not targets:
-            return False, "", False
+        if not targets: return False, "", False
         
-        # 只要有一个 session 的 last_key 不等于 current_key，就说明需要触发
         needs_trigger = any(self.session_sent_keys.get(sid) != trigger_key for sid in targets)
         
         return needs_trigger, trigger_key, is_compensation
 
     def _generate_time_key(self, freq: str, dt: datetime.datetime) -> str:
-        """生成用于去重的唯一时间键"""
-        if freq == "daily":
-            return dt.strftime("%Y-%m-%d") # 每天一个Key
-        elif freq == "hourly":
-            return dt.strftime("%Y-%m-%d-%H") # 每小时一个Key
-        elif freq == "weekly":
-            return dt.strftime("%Y-W%W") # 每周一个Key
-        elif freq == "once":
-            return "ONCE_TASK"
+        if freq == "daily": return dt.strftime("%Y-%m-%d")
+        elif freq == "hourly": return dt.strftime("%Y-%m-%d-%H")
+        elif freq == "weekly": return dt.strftime("%Y-W%W")
         return ""
 
     def _get_target_datetime(self, freq: str, now: datetime.datetime) -> datetime.datetime:
-        """反推当前的理论触发时间"""
         time_str = self.plugin.config.get("schedule.time", "08:00")
         try:
             h, m = map(int, time_str.split(":"))
@@ -151,80 +145,95 @@ class VoiceScheduler:
         
         if freq == "hourly":
             target = now.replace(minute=m, second=0, microsecond=0)
-            # 如果当前分钟 < 目标分钟，说明目标是上一个小时
             if now.minute < m:
                 target -= datetime.timedelta(hours=1)
         
-        elif freq == "weekly":
-            weekday = self.plugin.config.get("schedule.weekday", 1)
-            # 简单处理：仅计算当天的目标时间，周几的判断交给 Key 匹配
-            # 这里逻辑可以简化，因为 Key 匹配才是硬道理
-            pass 
-
         return target
 
-    # ==================== 分发执行 (Polymorphic Dispatch) ====================
+    # ==================== 分发执行 (智能上下文版) ====================
 
     async def _execute_dispatch(self, trigger_key: str, is_compensation: bool):
         targets = self.plugin.config.get("schedule.target_sessions", [])
         config_tags = self.plugin.config.get("schedule.voice_tags", [])
         
-        # 乱序发送，模拟真人操作
-        # list() copy 一份防止修改原配置
         dispatch_list = list(targets)
         random.shuffle(dispatch_list)
 
         logger.info(f"[调度器] 开始分发，目标数: {len(dispatch_list)}，模式: {'补偿' if is_compensation else '实时'}")
 
         for i, session_id in enumerate(dispatch_list):
-            # 1. 幂等性检查 (Double Check)
             if self.session_sent_keys.get(session_id) == trigger_key:
                 continue
 
-            # 2. 上下文注入 (Context Injection)
+            # 1. 确定上下文标签
             final_tag = self._determine_context_tag(config_tags)
 
-            # 3. 多态获取 (Polymorphic Fetch)
-            # 每个群独立调用 VoiceManager，配合 v3.0 的去重算法，每个群听到的可能不同
+            # 2. 获取语音
             rel_path = self.voice_manager.get_voice(final_tag)
             
             if rel_path:
-                await self._do_send(session_id, rel_path)
-                self.session_sent_keys[session_id] = trigger_key
+                sent = await self._do_send(session_id, rel_path)
+                if sent:
+                    self.session_sent_keys[session_id] = trigger_key
+                    
+                    # === 3. 智能上下文注入 (v3.1 新增) ===
+                    # 主动发送后，告诉情感引擎和主插件：“我现在处于这个情绪状态”
+                    # 这样如果用户回复，会接上这个状态
+                    self._inject_context(session_id, final_tag)
             
-            # 4. 时间抖动 (Temporal Jitter)
-            # 如果是补偿模式，为了尽快发完，抖动小一点；正常模式抖动大一点
+            # 4. 时间抖动
             if i < len(dispatch_list) - 1:
                 jitter = random.uniform(0.5, 1.5) if is_compensation else random.uniform(2.0, 8.0)
                 await asyncio.sleep(jitter)
 
     def _determine_context_tag(self, config_tags: List[str]) -> Optional[str]:
-        """
-        根据当前时间注入上下文标签。
-        如果配置了特定标签，优先用配置的；否则根据时间段智能选择。
-        """
-        if config_tags:
-            return random.choice(config_tags)
+        if config_tags: return random.choice(config_tags)
         
-        # 智能时间段判定
+        # 智能时间段判定 (Sync with Sentiment Engine)
         h = datetime.datetime.now().hour
-        if 5 <= h < 10:
-            return "morning"
-        elif 11 <= h < 14:
-            return "lunch" # 如果你的库里有
-        elif 22 <= h or h < 4:
-            return "sanity" # 晚安/休息
+        if 5 <= h < 10: return "morning"
+        elif 11 <= h < 14: return "rest" # 午休
+        elif 14 <= h < 18: return "work" # 下午工作
+        elif 22 <= h or h < 4: return "sanity" # 晚安
         
-        return None # 随机
+        return "theresia" # 默认
+
+    def _inject_context(self, session_id: str, tag: str):
+        """注入上下文状态，让插件'记住'这次主动发言"""
+        try:
+            # 1. 更新主插件的 Session 状态 (防止用户秒回时触发 CD)
+            if hasattr(self.plugin, "_update_session_state"):
+                updates = {
+                    "last_trigger": time.time(), # 视为一次触发
+                    "last_tag": tag,
+                    # 如果是特定情绪，设置为心情惯性
+                    "mood_tag": tag if tag in ["morning", "sanity"] else None,
+                    "mood_expiry": time.time() + 300 # 5分钟惯性
+                }
+                self.plugin._update_session_state(session_id, updates)
+            
+            # 2. 更新情感引擎的记忆 (Context Memory)
+            # 构造一个假的结果注入进去
+            if hasattr(self.plugin, "analyzer"):
+                # 模拟 AnalysisResult
+                from .sentiment_analyzer import AnalysisResult
+                fake_res = AnalysisResult(
+                    tag=tag, score=6.0, priority=1, confidence=1.0, 
+                    intensity="moderate", details={}, mixed_emotions=[]
+                )
+                self.plugin.analyzer._update_context(session_id, fake_res)
+                
+        except Exception as e:
+            logger.warning(f"[调度器] 上下文注入失败: {e}")
 
     # ==================== 底层发送 ====================
 
-    async def _do_send(self, session_id: str, rel_path: str):
+    async def _do_send(self, session_id: str, rel_path: str) -> bool:
         abs_path = (self.voice_manager.base_dir / rel_path).resolve()
-        if not abs_path.exists():
-            return
+        if not abs_path.exists(): return False
 
         try:
+            # 兼容不同版本的 Astrbot 接口
             if hasattr(self.plugin.context, "send_message"):
                 await self.plugin.context.send_message(
                     session_id=session_id,
@@ -235,13 +244,16 @@ class VoiceScheduler:
                     session_id=session_id,
                     message_chain=[Record(file=str(abs_path))]
                 )
+            return True
         except Exception as e:
             logger.warning(f"[调度器] 发送失败 ({session_id}): {e}")
+            return False
 
     # ==================== 辅助方法 ====================
 
     def _config_changed(self) -> bool:
         cfg = self.plugin.config
+        # 签名包含 target_sessions，支持动态添加目标
         signature = str({
             "en": cfg.get("schedule.enabled"),
             "tm": cfg.get("schedule.time"),

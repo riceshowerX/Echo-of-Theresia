@@ -1,14 +1,15 @@
 name: echo_of_theresia
 display_name: Echo of Theresia - 特雷西娅语音插件
-version: "2.2.0"
+version: "3.0.0"
 author: riceshowerX
 description: >
-  基于自研算法的特雷西娅拟人化语音插件。
-  核心特性：
-  1. 拟人化时空调度 (v2.2)：集成时间抖动、多态分发、断点补偿算法。
-  2. 情感惯性引擎 (EI)：拥有短期情绪记忆，拒绝机械式回复。
-  3. 自适应决策系统 (ACD)：基于情绪分数的动态冷却，紧急求助秒回。
-  4. 沉浸式体验：支持动态熵减语音去重、语义级情感共鸣及深夜理智护航。
+  历经核心重构的特雷西娅拟人化语音插件 (v3.0)。
+  
+  【核心升级】
+  1. 源石情感引擎 (v3.1)：支持双重否定、反问句翻转、反模式检测（如区分"笑死"与"死亡"），精准捕捉15种情绪。
+  2. 角色人格适配 (v3.3)：内置情感转化层，将用户的负面宣泄自动转化为特雷西娅的温柔包容。
+  3. 全局上下文记忆：拥有长达5分钟的情绪惯性，实现多轮对话的情感连贯性。
+  4. 智能调度系统：定时问候会自动注入上下文状态，让特雷西娅的主动发言融入对话流。
 license: MIT
 url: https://github.com/riceshowerX/Echo-of-Theresia
 categories:
@@ -17,6 +18,7 @@ categories:
   - voice
   - entertainment
   - ai
+  - sentiment-analysis
 icon: logo.png
 require_admin: false
 experimental: false
